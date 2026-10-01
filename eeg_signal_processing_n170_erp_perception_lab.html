@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EEG 10-20 Signal Processing & N170 ERP Lab</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        face: '#a855f7',    // Purple for Face Condition
+                        object: '#14b8a6',  // Teal for Object Condition
+                        diff: '#f59e0b',    // Amber for Difference Wave
+                        darkbg: '#080c14',
+                        panelbg: '#0f172a'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #080c14;
+            color: #f3f4f6;
+        }
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        .slider-thumb::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #a855f7;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+        }
+        .slider-thumb::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #a855f7;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden bg-slate-950 text-slate-100">
+
+    <!-- Header -->
+    <header class="bg-slate-900 border-b border-slate-800 px-5 py-2.5 flex items-center justify-between shrink-0 shadow-lg">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-gradient-to-tr from-purple-600 via-indigo-600 to-teal-500 rounded-xl text-white shadow-lg shadow-purple-500/20">
+                <i class="fa-solid fa-brain text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-base font-bold bg-gradient-to-r from-purple-400 via-indigo-300 to-teal-300 bg-clip-text text-transparent">
+                    10-20 EEG & N170 ERP Perception Lab
+                </h1>
+                <p class="text-[11px] text-slate-400">Visual Task: Face vs. Object Recognition (80 Trials, 2000ms ISI, 21 Electrodes)</p>
+            </div>
+        </div>
+
+        <!-- Global Header Action Controls -->
+        <div class="flex items-center space-x-3">
+            <!-- Channel Selector Dropdown -->
+            <div class="flex items-center space-x-2 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1">
+                <i class="fa-solid fa-circle-dot text-purple-400 text-xs"></i>
+                <span class="text-xs font-semibold text-slate-300">Active Channel:</span>
+                <select id="selectActiveChannel" class="bg-slate-900 text-purple-300 text-xs font-bold rounded px-2 py-0.5 border border-slate-700 focus:outline-none code-font">
+                    <!-- Dynamic options generated via JS -->
+                </select>
+            </div>
+
+            <!-- Resynthesize Dataset -->
+            <button id="btnRegenerate" class="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition shadow">
+                <i class="fa-solid fa-arrows-rotate text-purple-400"></i>
+                <span>Resynthesize Dataset</span>
+            </button>
+
+            <!-- Audio Sonification -->
+            <div class="flex items-center space-x-2 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1">
+                <button id="btnAudioToggle" class="flex items-center space-x-1.5 text-xs font-semibold px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white rounded transition shadow">
+                    <i id="audioIcon" class="fa-solid fa-volume-high"></i>
+                    <span id="audioText">Audio On</span>
+                </button>
+                <input id="audioVolume" type="range" min="0" max="1" step="0.05" value="0.2" class="w-14 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer slider-thumb">
+            </div>
+
+            <!-- Educational Theory Modal Trigger -->
+            <button id="btnTheoryModal" class="p-2 text-slate-400 hover:text-purple-400 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition" title="10-20 & ERP Theory">
+                <i class="fa-solid fa-graduation-cap text-base"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN LAB WORKSPACE -->
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- Left Sidebar: Controls & 10-20 Topo Map -->
+        <aside class="w-80 lg:w-96 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 overflow-y-auto">
+            
+            <!-- Sidebar Navigation Tabs -->
+            <div class="flex border-b border-slate-800 text-xs font-semibold text-slate-400">
+                <button id="tabBtnMontage" class="flex-1 py-2.5 border-b-2 border-purple-500 text-purple-400 bg-slate-800/50 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-head-side-virus"></i>
+                    <span>10-20 Montage</span>
+                </button>
+                <button id="tabBtnTask" class="flex-1 py-2.5 border-b-2 border-transparent hover:text-slate-200 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>Signal & Noise</span>
+                </button>
+                <button id="tabBtnFilter" class="flex-1 py-2.5 border-b-2 border-transparent hover:text-slate-200 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-filter"></i>
+                    <span>Digital Filter</span>
+                </button>
+            </div>
+
+            <!-- 1. MONTAGE & TOPOGRAPHY TAB -->
+            <div id="tabContentMontage" class="p-3.5 space-y-3.5">
+                
+                <!-- 10-20 Head Map Canvas -->
+                <div class="bg-slate-950/90 p-3 rounded-xl border border-slate-800 flex flex-col items-center">
+                    <div class="w-full flex justify-between items-center mb-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            10-20 Interactive Head Map
+                        </span>
+                        <span class="text-[10px] text-purple-400 font-semibold code-font">Click node to select</span>
+                    </div>
+                    <div class="w-full aspect-square max-w-[240px] relative">
+                        <canvas id="headMapCanvas" class="w-full h-full cursor-pointer"></canvas>
+                    </div>
+                </div>
+
+                <!-- Scalp Topography Latency Slider & Heatmap Display -->
+                <div class="bg-slate-950/90 p-3 rounded-xl border border-slate-800 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            Scalp Topography ($\mu V$)
+                        </span>
+                        <span id="topographyLatencyVal" class="text-xs font-bold text-amber-400 code-font">
+                            t = 170 ms (N170 Peak)
+                        </span>
+                    </div>
+                    
+                    <input id="sliderTopographyLatency" type="range" min="-200" max="800" step="10" value="170" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    
+                    <div class="flex items-center space-x-3 pt-1">
+                        <div class="w-28 h-28 shrink-0 relative bg-slate-900 rounded-lg border border-slate-800 overflow-hidden">
+                            <canvas id="topographyCanvas" class="w-full h-full"></canvas>
+                        </div>
+                        <div class="flex-1 text-[11px] text-slate-400 leading-snug space-y-1">
+                            <p><strong>Topography Insight:</strong></p>
+                            <p id="topographyInsightText">At 170ms, notice the bilateral occipitotemporal negative potential (purple/blue) centered around P7, P8, PO7, PO8 for faces.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trial Runner Engine -->
+                <div class="bg-slate-950/90 p-3 rounded-xl border border-slate-800 space-y-2.5">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            Trial Runner Engine
+                        </span>
+                        <span id="stimulusConditionBadge" class="text-[10px] bg-purple-950 text-purple-300 font-semibold px-2 py-0.5 rounded border border-purple-800 code-font">
+                            Face Stimulus
+                        </span>
+                    </div>
+
+                    <!-- Flash Display Box -->
+                    <div class="h-20 bg-slate-900 rounded-lg border border-slate-800 flex flex-col items-center justify-center relative overflow-hidden">
+                        <div id="stimulusBox" class="text-center transition-all duration-150 transform scale-90 opacity-80">
+                            <i id="stimulusIcon" class="fa-solid fa-user text-3xl text-purple-400 mb-0.5"></i>
+                            <div id="stimulusLabel" class="text-[11px] font-bold uppercase tracking-widest text-slate-300">Face Target</div>
+                        </div>
+                        <div id="stimulusTimer" class="absolute bottom-1 right-2 text-[10px] code-font text-slate-500">
+                            Trial 1 / 80
+                        </div>
+                    </div>
+
+                    <!-- Playback Controls -->
+                    <div class="flex items-center space-x-2">
+                        <button id="btnPlayTrials" class="flex-1 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded font-semibold text-xs shadow flex items-center justify-center space-x-1.5">
+                            <i id="playIcon" class="fa-solid fa-play text-xs"></i>
+                            <span id="playText">Run Trials Loop</span>
+                        </button>
+                        <button id="btnStepTrial" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-semibold text-xs border border-slate-700">
+                            Next <i class="fa-solid fa-forward text-xs"></i>
+                        </button>
+                    </div>
+
+                    <div>
+                        <input id="sliderTrialScrub" type="range" min="1" max="80" step="1" value="1" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 2. SIGNAL & NOISE TAB -->
+            <div id="tabContentTask" class="p-3.5 space-y-3.5 hidden">
+
+                <!-- EEG Rhythm Generators -->
+                <div class="bg-slate-950/90 p-3 rounded-xl border border-slate-800 space-y-3">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                        Background EEG Oscillations
+                    </span>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300">Alpha Rhythm (8-12 Hz)</span>
+                            <span id="valAlpha" class="code-font text-indigo-400 font-semibold">18 µV</span>
+                        </div>
+                        <input id="sliderAlpha" type="range" min="0" max="40" step="1" value="18" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300">1/f Background Noise Floor</span>
+                            <span id="valPink" class="code-font text-indigo-400 font-semibold">15 µV</span>
+                        </div>
+                        <input id="sliderPink" type="range" min="2" max="35" step="1" value="15" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+                </div>
+
+                <!-- Artifact Injection Controls -->
+                <div class="bg-slate-950/90 p-3 rounded-xl border border-slate-800 space-y-3">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                        Artifact Generators
+                    </span>
+
+                    <div class="space-y-2">
+                        <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer">
+                            <span>50/60 Hz Mains Hum</span>
+                            <input id="chkMains" type="checkbox" class="accent-purple-500 rounded cursor-pointer">
+                        </label>
+                        <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer">
+                            <span>Ocular Blinks (Frontal Fp1/Fp2)</span>
+                            <input id="chkBlinks" type="checkbox" checked class="accent-purple-500 rounded cursor-pointer">
+                        </label>
+                        <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer">
+                            <span>Muscle EMG Noise (Temporal T7/T8)</span>
+                            <input id="chkEMG" type="checkbox" class="accent-purple-500 rounded cursor-pointer">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- N170 ERP Tuning Controls -->
+                <div class="bg-slate-950/90 p-3 rounded-xl border border-slate-800 space-y-3">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                        N170 Target Selectivity Peak
+                    </span>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300">Face N170 Amplitude</span>
+                            <span id="valN170Amp" class="code-font text-purple-400 font-semibold">-12.0 µV</span>
+                        </div>
+                        <input id="sliderN170Amp" type="range" min="-20" max="-3" step="0.5" value="-12" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300">Object N170 Amplitude</span>
+                            <span id="valN170ObjAmp" class="code-font text-teal-400 font-semibold">-4.0 µV</span>
+                        </div>
+                        <input id="sliderN170ObjAmp" type="range" min="-12" max="0" step="0.5" value="-4" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 3. DIGITAL FILTER TAB -->
+            <div id="tabContentFilter" class="p-3.5 space-y-3.5 hidden">
+
+                <div class="bg-slate-950/90 p-3 rounded-xl border border-slate-800 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">
+                            Digital Filter Settings
+                        </span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input id="chkFilterActive" type="checkbox" checked class="sr-only peer">
+                            <div class="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                        </label>
+                    </div>
+
+                    <!-- High-pass Cutoff -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300">High-pass Cutoff</span>
+                            <span id="valHpCutoff" class="code-font text-emerald-400 font-semibold">0.5 Hz</span>
+                        </div>
+                        <input id="sliderHpCutoff" type="range" min="0.1" max="5.0" step="0.1" value="0.5" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+
+                    <!-- Low-pass Cutoff -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300">Low-pass Cutoff</span>
+                            <span id="valLpCutoff" class="code-font text-emerald-400 font-semibold">30 Hz</span>
+                        </div>
+                        <input id="sliderLpCutoff" type="range" min="10" max="100" step="2" value="30" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+
+                    <!-- Notch Filter -->
+                    <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer pt-2 border-t border-slate-800">
+                        <span>50/60 Hz Notch Filter</span>
+                        <input id="chkNotch" type="checkbox" checked class="accent-emerald-500 rounded cursor-pointer">
+                    </label>
+                </div>
+
+                <!-- Filter Magnitude Response Canvas -->
+                <div class="bg-slate-950/90 p-3 rounded-xl border border-slate-800 space-y-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                        Filter Frequency Response $|H(f)|$
+                    </span>
+                    <div class="h-32 relative">
+                        <canvas id="filterCanvas"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+        </aside>
+
+        <!-- Main Analytics & Graphics Section -->
+        <main class="flex-1 flex flex-col overflow-hidden bg-slate-950 p-3.5 space-y-3">
+
+            <!-- KPI Cards Header -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
+                <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between shadow">
+                    <div>
+                        <div class="text-[11px] text-slate-400">Face N170 Amplitude</div>
+                        <div id="kpiN170Face" class="text-sm font-bold code-font text-purple-400">-11.8 µV</div>
+                    </div>
+                    <i class="fa-solid fa-user-ninja text-purple-500/20 text-2xl"></i>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between shadow">
+                    <div>
+                        <div class="text-[11px] text-slate-400">Object N170 Amplitude</div>
+                        <div id="kpiN170Object" class="text-sm font-bold code-font text-teal-400">-3.9 µV</div>
+                    </div>
+                    <i class="fa-solid fa-cube text-teal-500/20 text-2xl"></i>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between shadow">
+                    <div>
+                        <div class="text-[11px] text-slate-400">N170 Effect ($\Delta$ Face-Obj)</div>
+                        <div id="kpiDiff" class="text-sm font-bold code-font text-amber-400">-7.9 µV</div>
+                    </div>
+                    <i class="fa-solid fa-arrow-down-wide-short text-amber-500/20 text-2xl"></i>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between shadow">
+                    <div>
+                        <div class="text-[11px] text-slate-400">SNR ($N=40$ Trials)</div>
+                        <div id="kpiSNR" class="text-sm font-bold code-font text-emerald-400">14.2 dB</div>
+                    </div>
+                    <i class="fa-solid fa-wave-square text-emerald-500/20 text-2xl"></i>
+                </div>
+            </div>
+
+            <!-- View Switcher Bar -->
+            <div class="flex items-center justify-between bg-slate-900 px-3.5 py-1.5 rounded-xl border border-slate-800 shrink-0">
+                <div class="flex space-x-1.5 text-xs font-medium">
+                    <button id="viewBtnErp" class="px-3 py-1 rounded bg-purple-600 text-white shadow">
+                        <i class="fa-solid fa-chart-line mr-1"></i> Grand Average ERP
+                    </button>
+                    <button id="viewBtnMontage" class="px-3 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700">
+                        <i class="fa-solid fa-bars-staggered mr-1"></i> Multi-Channel EEG
+                    </button>
+                    <button id="viewBtnRaster" class="px-3 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700">
+                        <i class="fa-solid fa-grip mr-1"></i> ERP Image Raster
+                    </button>
+                    <button id="viewBtnPsd" class="px-3 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700">
+                        <i class="fa-solid fa-chart-area mr-1"></i> Spectral PSD
+                    </button>
+                </div>
+
+                <div class="text-xs text-slate-400 font-mono flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Viewing Electrode: <strong id="lblActiveElectrode" class="text-purple-300">P8</strong></span>
+                </div>
+            </div>
+
+            <!-- Main Interactive Display Containers -->
+            <div class="flex-1 grid grid-cols-1 gap-3 min-h-0 relative">
+
+                <!-- 1. GRAND AVERAGE ERP VIEW -->
+                <div id="viewContainerErp" class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col min-h-0 relative">
+                    <div class="flex justify-between items-center mb-1 shrink-0">
+                        <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                            Grand Average ERP Window (-200ms Baseline to +800ms)
+                        </h2>
+                        <div class="flex items-center space-x-4 text-xs font-medium">
+                            <span class="flex items-center gap-1.5 text-purple-400"><span class="w-3 h-1 bg-purple-500 inline-block rounded"></span> Face Condition</span>
+                            <span class="flex items-center gap-1.5 text-teal-400"><span class="w-3 h-1 bg-teal-500 inline-block rounded"></span> Object Condition</span>
+                            <span class="flex items-center gap-1.5 text-amber-400"><span class="w-3 h-0.5 bg-amber-400 border-dashed border-t inline-block"></span> Difference Wave</span>
+                        </div>
+                    </div>
+                    <div class="flex-1 min-h-0 relative">
+                        <canvas id="erpCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- 2. MULTI-CHANNEL CONTINUOUS MONTAGE VIEW -->
+                <div id="viewContainerMontage" class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col min-h-0 relative hidden">
+                    <div class="flex justify-between items-center mb-1 shrink-0">
+                        <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                            Full 10-20 Continuous Multi-Channel EEG View
+                        </h2>
+                        <div class="text-[11px] text-slate-400">
+                            Single Trial #<span id="lblMontageTrialNum" class="text-purple-300 font-bold">1</span> Continuous Traces
+                        </div>
+                    </div>
+                    <div class="flex-1 min-h-0 relative">
+                        <canvas id="multiChannelCanvas" class="w-full h-full rounded"></canvas>
+                    </div>
+                </div>
+
+                <!-- 3. TRIAL RASTER / ERP IMAGE VIEW -->
+                <div id="viewContainerRaster" class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col min-h-0 relative hidden">
+                    <div class="flex justify-between items-center mb-1 shrink-0">
+                        <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                            Trial ERP Raster Image (80 Trials Stacked for Active Channel)
+                        </h2>
+                        <div class="text-[11px] text-slate-400">
+                            Negativity (<span class="text-purple-400 font-bold">-µV</span>) vs Positivity (<span class="text-amber-400 font-bold">+µV</span>)
+                        </div>
+                    </div>
+                    <div class="flex-1 min-h-0 relative flex items-center justify-center">
+                        <canvas id="rasterCanvas" class="w-full h-full object-contain rounded border border-slate-800"></canvas>
+                    </div>
+                </div>
+
+                <!-- 4. POWER SPECTRAL DENSITY VIEW -->
+                <div id="viewContainerPsd" class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col min-h-0 relative hidden">
+                    <div class="flex justify-between items-center mb-1 shrink-0">
+                        <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                            Power Spectral Density (Baseline vs Post-Stimulus Response)
+                        </h2>
+                        <div class="text-[11px] text-slate-400">
+                            Shows Alpha Desynchronization (ERD) upon stimulus onset
+                        </div>
+                    </div>
+                    <div class="flex-1 min-h-0 relative">
+                        <canvas id="psdCanvas"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Single Trial Monitor Bar -->
+            <div class="h-28 bg-slate-900 border border-slate-800 rounded-xl p-2.5 flex flex-col shrink-0">
+                <div class="flex justify-between items-center mb-1 shrink-0">
+                    <span id="singleTrialTitle" class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                        Single Epoch Raw Trace - Channel P8 / Trial #1 (Face Stimulus)
+                    </span>
+                    <span class="text-[10px] text-slate-500 code-font">Single epoch noise masks microvolt ERP</span>
+                </div>
+                <div class="flex-1 min-h-0 relative">
+                    <canvas id="singleTrialCanvas"></canvas>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Educational Theory Modal -->
+    <div id="modalTheory" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-4 border-b border-slate-800 flex justify-between items-center">
+                <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-graduation-cap text-purple-400"></i>
+                    Electrophysiology Primer: 10-20 Montage & ERP Selectivity
+                </h3>
+                <button id="btnCloseModal" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-5 overflow-y-auto space-y-4 text-xs text-slate-300 leading-relaxed">
+                <div>
+                    <h4 class="font-bold text-purple-400 text-sm mb-1">1. The International 10-20 System</h4>
+                    <p>
+                        The 10-20 system is an internationally recognized method to describe and apply the location of scalp electrodes. The numbers 10 and 20 refer to the fact that the distances between adjacent electrodes are either 10% or 20% of the total front-back or right-left distance of the skull.
+                    </p>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-purple-400 text-sm mb-1">2. Topography of the N170 ERP Component</h4>
+                    <p>
+                        The <strong>N170</strong> is a prominent negative deflection occurring at 130–200ms post-stimulus. It is maximally recorded over <strong>parieto-occipitotemporal sites (P7, P8, PO7, PO8)</strong>. It reflects the structural encoding of visual faces.
+                    </p>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-purple-400 text-sm mb-1">3. Channel Artifact Profiles</h4>
+                    <p>
+                        • <strong>Fp1 / Fp2 (Frontal):</strong> Highly sensitive to vertical eye blinks and saccades.<br>
+                        • <strong>T7 / T8 (Temporal):</strong> Susceptible to high-frequency jaw and facial muscle (EMG) noise.<br>
+                        • <strong>O1 / O2 / Oz (Occipital):</strong> Dominant baseline Alpha rhythm (8-12 Hz).
+                    </p>
+                </div>
+            </div>
+            <div class="p-4 border-t border-slate-800 flex justify-end">
+                <button id="btnOkModal" class="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded font-medium text-xs">
+                    Understand & Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script Logic -->
+    <script>
+        // Standard 10-20 Electrode Coordinates (2D Normalized -1 to +1)
+        const ELECTRODES_1020 = [
+            { id: 'Fp1', x: -0.3, y: -0.85, region: 'frontal', blinkSensitivity: 1.0, emgSensitivity: 0.1, n170Weight: 0.1 },
+            { id: 'Fp2', x: 0.3, y: -0.85, region: 'frontal', blinkSensitivity: 1.0, emgSensitivity: 0.1, n170Weight: 0.1 },
+            { id: 'Fz',  x: 0.0, y: -0.55, region: 'frontal', blinkSensitivity: 0.4, emgSensitivity: 0.1, n170Weight: 0.2 },
+            { id: 'F3',  x: -0.45, y: -0.5, region: 'frontal', blinkSensitivity: 0.5, emgSensitivity: 0.2, n170Weight: 0.2 },
+            { id: 'F4',  x: 0.45, y: -0.5, region: 'frontal', blinkSensitivity: 0.5, emgSensitivity: 0.2, n170Weight: 0.2 },
+            { id: 'F7',  x: -0.8, y: -0.45, region: 'frontal', blinkSensitivity: 0.6, emgSensitivity: 0.4, n170Weight: 0.2 },
+            { id: 'F8',  x: 0.8, y: -0.45, region: 'frontal', blinkSensitivity: 0.6, emgSensitivity: 0.4, n170Weight: 0.2 },
+            { id: 'Cz',  x: 0.0, y: 0.0, region: 'central', blinkSensitivity: 0.1, emgSensitivity: 0.1, n170Weight: 0.3 },
+            { id: 'C3',  x: -0.5, y: 0.0, region: 'central', blinkSensitivity: 0.1, emgSensitivity: 0.2, n170Weight: 0.3 },
+            { id: 'C4',  x: 0.5, y: 0.0, region: 'central', blinkSensitivity: 0.1, emgSensitivity: 0.2, n170Weight: 0.3 },
+            { id: 'T7',  x: -0.88, y: 0.0, region: 'temporal', blinkSensitivity: 0.1, emgSensitivity: 0.9, n170Weight: 0.3 },
+            { id: 'T8',  x: 0.88, y: 0.0, region: 'temporal', blinkSensitivity: 0.1, emgSensitivity: 0.9, n170Weight: 0.3 },
+            { id: 'Pz',  x: 0.0, y: 0.55, region: 'parietal', blinkSensitivity: 0.05, emgSensitivity: 0.1, n170Weight: 0.5 },
+            { id: 'P3',  x: -0.45, y: 0.5, region: 'parietal', blinkSensitivity: 0.05, emgSensitivity: 0.2, n170Weight: 0.6 },
+            { id: 'P4',  x: 0.45, y: 0.5, region: 'parietal', blinkSensitivity: 0.05, emgSensitivity: 0.2, n170Weight: 0.6 },
+            { id: 'P7',  x: -0.8, y: 0.5, region: 'parietal', blinkSensitivity: 0.05, emgSensitivity: 0.5, n170Weight: 0.95 },
+            { id: 'P8',  x: 0.8, y: 0.5, region: 'parietal', blinkSensitivity: 0.05, emgSensitivity: 0.5, n170Weight: 1.0 },
+            { id: 'PO7', x: -0.6, y: 0.72, region: 'occipital', blinkSensitivity: 0.05, emgSensitivity: 0.3, n170Weight: 0.95 },
+            { id: 'PO8', x: 0.6, y: 0.72, region: 'occipital', blinkSensitivity: 0.05, emgSensitivity: 0.3, n170Weight: 0.98 },
+            { id: 'Oz',  x: 0.0, y: 0.85, region: 'occipital', blinkSensitivity: 0.05, emgSensitivity: 0.1, n170Weight: 0.6 },
+            { id: 'O1',  x: -0.3, y: 0.85, region: 'occipital', blinkSensitivity: 0.05, emgSensitivity: 0.2, n170Weight: 0.7 },
+            { id: 'O2',  x: 0.3, y: 0.85, region: 'occipital', blinkSensitivity: 0.05, emgSensitivity: 0.2, n170Weight: 0.7 }
+        ];
+
+        // Global State
+        const state = {
+            Fs: 250,              // 250 Hz Sampling Rate
+            numTrials: 80,        // 40 Face, 40 Object
+            epochPreMs: 200,      // -200ms baseline
+            epochPostMs: 800,     // +800ms post stimulus
+            activeChannel: 'P8',  // Currently active 10-20 electrode
+            activeTrialIndex: 0,  // Currently scrubbed trial
+            topographyLatency: 170, // Time ms for scalp topo
+            isPlayingLoop: false,
+            playbackInterval: null,
+            audioEnabled: false,
+            audioCtx: null,
+
+            // EEG Parameters
+            alphaAmp: 18,
+            pinkNoise: 15,
+            mainsHum: false,
+            blinks: true,
+            emgNoise: false,
+
+            // ERP Parameters
+            n170FaceAmp: -12.0,
+            n170ObjAmp: -4.0,
+
+            // Filter Configuration
+            filter: {
+                active: true,
+                hpCutoff: 0.5,
+                lpCutoff: 30,
+                notch: true
+            },
+
+            // Multi-channel Dataset
+            // trials[tIdx].channels[chId] -> { rawEpoch, filteredEpoch, tVector }
+            trials: [],
+            grandAverages: {} // grandAverages[chId] -> { face: {mean, sem}, obj: {mean, sem}, diff: [] }
+        };
+
+        // Charts
+        let erpChart, psdChart, filterChart, singleTrialChart;
+
+        window.onload = function() {
+            populateChannelDropdown();
+            initUIControls();
+            initCharts();
+            synthesizeMultiChannelDataset();
+            renderHeadMap();
+            renderTopography();
+            updateAllVisualizations();
+        };
+
+        function populateChannelDropdown() {
+            const select = document.getElementById('selectActiveChannel');
+            select.innerHTML = '';
+            ELECTRODES_1020.forEach(e => {
+                const opt = document.createElement('option');
+                opt.value = e.id;
+                opt.innerText = `${e.id} (${e.region})`;
+                if (e.id === state.activeChannel) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+
+        function initUIControls() {
+            // Channel Dropdown Change
+            document.getElementById('selectActiveChannel').addEventListener('change', (e) => {
+                state.activeChannel = e.target.value;
+                document.getElementById('lblActiveElectrode').innerText = state.activeChannel;
+                renderHeadMap();
+                updateAllVisualizations();
+            });
+
+            // Sidebar Tabs
+            document.getElementById('tabBtnMontage').addEventListener('click', () => switchSidebarTab('montage'));
+            document.getElementById('tabBtnTask').addEventListener('click', () => switchSidebarTab('task'));
+            document.getElementById('tabBtnFilter').addEventListener('click', () => switchSidebarTab('filter'));
+
+            // View Mode Switchers
+            document.getElementById('viewBtnErp').addEventListener('click', () => switchViewMode('erp'));
+            document.getElementById('viewBtnMontage').addEventListener('click', () => switchViewMode('montage'));
+            document.getElementById('viewBtnRaster').addEventListener('click', () => switchViewMode('raster'));
+            document.getElementById('viewBtnPsd').addEventListener('click', () => switchViewMode('psd'));
+
+            // Regenerate Dataset
+            document.getElementById('btnRegenerate').addEventListener('click', () => {
+                synthesizeMultiChannelDataset();
+                updateAllVisualizations();
+            });
+
+            // Topography Latency Slider
+            document.getElementById('sliderTopographyLatency').addEventListener('input', (e) => {
+                state.topographyLatency = parseInt(e.target.value);
+                document.getElementById('topographyLatencyVal').innerText = `t = ${state.topographyLatency} ms`;
+                renderTopography();
+            });
+
+            // Sliders & Controls
+            document.getElementById('sliderAlpha').addEventListener('input', (e) => {
+                state.alphaAmp = parseFloat(e.target.value);
+                document.getElementById('valAlpha').innerText = `${state.alphaAmp} µV`;
+                synthesizeMultiChannelDataset();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('sliderPink').addEventListener('input', (e) => {
+                state.pinkNoise = parseFloat(e.target.value);
+                document.getElementById('valPink').innerText = `${state.pinkNoise} µV`;
+                synthesizeMultiChannelDataset();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('chkMains').addEventListener('change', (e) => {
+                state.mainsHum = e.target.checked;
+                synthesizeMultiChannelDataset();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('chkBlinks').addEventListener('change', (e) => {
+                state.blinks = e.target.checked;
+                synthesizeMultiChannelDataset();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('chkEMG').addEventListener('change', (e) => {
+                state.emgNoise = e.target.checked;
+                synthesizeMultiChannelDataset();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('sliderN170Amp').addEventListener('input', (e) => {
+                state.n170FaceAmp = parseFloat(e.target.value);
+                document.getElementById('valN170Amp').innerText = `${state.n170FaceAmp.toFixed(1)} µV`;
+                synthesizeMultiChannelDataset();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('sliderN170ObjAmp').addEventListener('input', (e) => {
+                state.n170ObjAmp = parseFloat(e.target.value);
+                document.getElementById('valN170ObjAmp').innerText = `${state.n170ObjAmp.toFixed(1)} µV`;
+                synthesizeMultiChannelDataset();
+                updateAllVisualizations();
+            });
+
+            // Filter Controls
+            document.getElementById('chkFilterActive').addEventListener('change', (e) => {
+                state.filter.active = e.target.checked;
+                reprocessFilters();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('sliderHpCutoff').addEventListener('input', (e) => {
+                state.filter.hpCutoff = parseFloat(e.target.value);
+                document.getElementById('valHpCutoff').innerText = `${state.filter.hpCutoff} Hz`;
+                reprocessFilters();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('sliderLpCutoff').addEventListener('input', (e) => {
+                state.filter.lpCutoff = parseFloat(e.target.value);
+                document.getElementById('valLpCutoff').innerText = `${state.filter.lpCutoff} Hz`;
+                reprocessFilters();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('chkNotch').addEventListener('change', (e) => {
+                state.filter.notch = e.target.checked;
+                reprocessFilters();
+                updateAllVisualizations();
+            });
+
+            // Scrubber
+            document.getElementById('sliderTrialScrub').addEventListener('input', (e) => {
+                state.activeTrialIndex = parseInt(e.target.value) - 1;
+                updateTrialScrubberUI();
+            });
+
+            document.getElementById('btnStepTrial').addEventListener('click', () => {
+                state.activeTrialIndex = (state.activeTrialIndex + 1) % state.numTrials;
+                document.getElementById('sliderTrialScrub').value = state.activeTrialIndex + 1;
+                updateTrialScrubberUI();
+            });
+
+            document.getElementById('btnPlayTrials').addEventListener('click', toggleTrialLoop);
+            document.getElementById('btnAudioToggle').addEventListener('click', toggleAudio);
+
+            // Modal
+            document.getElementById('btnTheoryModal').addEventListener('click', () => document.getElementById('modalTheory').classList.remove('hidden'));
+            document.getElementById('btnCloseModal').addEventListener('click', () => document.getElementById('modalTheory').classList.add('hidden'));
+            document.getElementById('btnOkModal').addEventListener('click', () => document.getElementById('modalTheory').classList.add('hidden'));
+        }
+
+        function switchSidebarTab(tab) {
+            const tabs = ['montage', 'task', 'filter'];
+            tabs.forEach(t => {
+                const isCurrent = t === tab;
+                document.getElementById(`tabContent${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.toggle('hidden', !isCurrent);
+                const btn = document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                btn.className = isCurrent
+                    ? "flex-1 py-2.5 border-b-2 border-purple-500 text-purple-400 bg-slate-800/50 flex items-center justify-center space-x-2"
+                    : "flex-1 py-2.5 border-b-2 border-transparent hover:text-slate-200 flex items-center justify-center space-x-2 text-slate-400";
+            });
+        }
+
+        function switchViewMode(mode) {
+            const views = { erp: 'Erp', montage: 'Montage', raster: 'Raster', psd: 'Psd' };
+            Object.keys(views).forEach(k => {
+                const isTarget = k === mode;
+                document.getElementById(`viewContainer${views[k]}`).classList.toggle('hidden', !isTarget);
+                document.getElementById(`viewBtn${views[k]}`).className = isTarget
+                    ? "px-3 py-1 rounded bg-purple-600 text-white shadow"
+                    : "px-3 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700";
+            });
+
+            if (mode === 'montage') renderMultiChannelMontage();
+            if (mode === 'raster') renderRasterHeatmap();
+        }
+
+        function synthesizeMultiChannelDataset() {
+            state.trials = [];
+            const epochSamples = Math.floor(((state.epochPreMs + state.epochPostMs) / 1000) * state.Fs);
+            const dt = 1 / state.Fs;
+
+            for (let tIdx = 0; tIdx < state.numTrials; tIdx++) {
+                const condition = (tIdx % 2 === 0) ? 'face' : 'object';
+                const trialObj = { id: tIdx + 1, condition, channels: {} };
+
+                ELECTRODES_1020.forEach(elec => {
+                    const rawEpoch = new Float32Array(epochSamples);
+                    const tVector = new Float32Array(epochSamples);
+
+                    const alphaPhase = Math.random() * Math.PI * 2;
+
+                    for (let i = 0; i < epochSamples; i++) {
+                        const timeMs = -state.epochPreMs + (i * dt * 1000);
+                        tVector[i] = timeMs;
+
+                        let val = 0;
+
+                        // 1. Pink Noise Floor
+                        val += (Math.random() - 0.5) * state.pinkNoise * 1.5;
+
+                        // 2. Alpha Rhythm (strongest in Occipital/Parietal)
+                        const alphaWeight = (elec.region === 'occipital' || elec.region === 'parietal') ? 1.0 : 0.4;
+                        val += Math.sin(2 * Math.PI * 10 * (i * dt) + alphaPhase) * state.alphaAmp * alphaWeight;
+
+                        // 3. Artifacts (Channel-Specific Sensitivity)
+                        if (state.mainsHum) {
+                            val += Math.sin(2 * Math.PI * 50 * (i * dt)) * 12.0;
+                        }
+                        if (state.blinks && elec.blinkSensitivity > 0.1 && Math.random() < 0.08 && timeMs < -50) {
+                            const blinkShape = Math.exp(-Math.pow((timeMs + 100) / 40, 2)) * 50 * elec.blinkSensitivity;
+                            val += blinkShape;
+                        }
+                        if (state.emgNoise && elec.emgSensitivity > 0.2) {
+                            val += (Math.random() - 0.5) * 35.0 * elec.emgSensitivity;
+                        }
+
+                        // 4. ERP Components (Position-dependent)
+                        if (timeMs >= 0) {
+                            // P100 (Occipital)
+                            const p100Weight = (elec.region === 'occipital') ? 1.0 : 0.3;
+                            const p100 = Math.exp(-Math.pow((timeMs - 100) / 20, 2)) * 6.0 * p100Weight;
+
+                            // N170 (Parieto-occipitotemporal P7/P8/PO7/PO8)
+                            const targetN170Amp = (condition === 'face') ? state.n170FaceAmp : state.n170ObjAmp;
+                            const n170 = Math.exp(-Math.pow((timeMs - 170) / 25, 2)) * targetN170Amp * elec.n170Weight;
+
+                            // P300 / LPP (Midline Central / Parietal Cz/Pz)
+                            const p300Weight = (elec.id === 'Cz' || elec.id === 'Pz') ? 1.2 : 0.5;
+                            const p300 = Math.exp(-Math.pow((timeMs - 350) / 70, 2)) * (condition === 'face' ? 8.0 : 4.0) * p300Weight;
+
+                            val += (p100 + n170 + p300);
+                        }
+
+                        rawEpoch[i] = val;
+                    }
+
+                    trialObj.channels[elec.id] = {
+                        rawEpoch,
+                        filteredEpoch: new Float32Array(rawEpoch),
+                        tVector
+                    };
+                });
+
+                state.trials.push(trialObj);
+            }
+
+            reprocessFilters();
+        }
+
+        function reprocessFilters() {
+            state.trials.forEach(trial => {
+                ELECTRODES_1020.forEach(elec => {
+                    let filtered = new Float32Array(trial.channels[elec.id].rawEpoch);
+
+                    if (state.filter.active) {
+                        if (state.filter.hpCutoff > 0.1) filtered = applySimpleIIR(filtered, state.Fs, state.filter.hpCutoff, 'highpass');
+                        if (state.filter.lpCutoff < 100) filtered = applySimpleIIR(filtered, state.Fs, state.filter.lpCutoff, 'lowpass');
+                        if (state.filter.notch) filtered = applyNotchFilter(filtered, state.Fs, 50.0);
+                    }
+
+                    trial.channels[elec.id].filteredEpoch = filtered;
+                });
+            });
+
+            computeMultiChannelGrandAverages();
+        }
+
+        function applySimpleIIR(signal, Fs, cutoff, type) {
+            const out = new Float32Array(signal.length);
+            const rc = 1.0 / (2 * Math.PI * cutoff);
+            const dt = 1.0 / Fs;
+            const alpha = (type === 'lowpass') ? dt / (rc + dt) : rc / (rc + dt);
+
+            out[0] = signal[0];
+            for (let i = 1; i < signal.length; i++) {
+                if (type === 'lowpass') out[i] = out[i - 1] + alpha * (signal[i] - out[i - 1]);
+                else out[i] = alpha * (out[i - 1] + signal[i] - signal[i - 1]);
+            }
+            return out;
+        }
+
+        function applyNotchFilter(signal, Fs, notchFreq) {
+            const out = new Float32Array(signal.length);
+            const w0 = 2 * Math.PI * notchFreq / Fs;
+            const r = 0.95;
+            let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+            const b0 = 1, b1 = -2 * Math.cos(w0), b2 = 1;
+            const a1 = -2 * r * Math.cos(w0), a2 = r * r;
+
+            for (let i = 0; i < signal.length; i++) {
+                const x0 = signal[i];
+                const y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+                out[i] = y0;
+                x2 = x1; x1 = x0; y2 = y1; y1 = y0;
+            }
+            return out;
+        }
+
+        function computeMultiChannelGrandAverages() {
+            const epochSamples = state.trials[0].channels['P8'].rawEpoch.length;
+            state.grandAverages = {};
+
+            ELECTRODES_1020.forEach(elec => {
+                const faceEpochs = state.trials.filter(t => t.condition === 'face').map(t => t.channels[elec.id].filteredEpoch);
+                const objEpochs = state.trials.filter(t => t.condition === 'object').map(t => t.channels[elec.id].filteredEpoch);
+
+                const calcMean = (epochs) => {
+                    const mean = new Float32Array(epochSamples);
+                    for (let i = 0; i < epochSamples; i++) {
+                        let sum = 0;
+                        for (let k = 0; k < epochs.length; k++) sum += epochs[k][i];
+                        mean[i] = sum / epochs.length;
+                    }
+                    return mean;
+                };
+
+                const faceMean = calcMean(faceEpochs);
+                const objMean = calcMean(objEpochs);
+                const diffWave = new Float32Array(epochSamples);
+                for (let i = 0; i < epochSamples; i++) diffWave[i] = faceMean[i] - objMean[i];
+
+                state.grandAverages[elec.id] = { face: faceMean, obj: objMean, diff: diffWave };
+            });
+
+            updateKPICards();
+        }
+
+        function renderHeadMap() {
+            const canvas = document.getElementById('headMapCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width = canvas.parentElement.clientWidth;
+            const height = canvas.height = canvas.parentElement.clientHeight;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const cx = width / 2;
+            const cy = height / 2;
+            const radius = Math.min(width, height) * 0.42;
+
+            // Head Outer Outline
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Nose Triangle
+            ctx.fillStyle = '#475569';
+            ctx.beginPath();
+            ctx.moveTo(cx - 12, cy - radius);
+            ctx.lineTo(cx, cy - radius - 14);
+            ctx.lineTo(cx + 12, cy - radius);
+            ctx.fill();
+
+            // Ears
+            ctx.beginPath();
+            ctx.arc(cx - radius - 4, cy, 10, -Math.PI / 2, Math.PI / 2, true);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(cx + radius + 4, cy, 10, -Math.PI / 2, Math.PI / 2, false);
+            ctx.stroke();
+
+            // Render Electrode Nodes
+            ELECTRODES_1020.forEach(e => {
+                const ex = cx + e.x * radius;
+                const ey = cy + e.y * radius;
+                const isSelected = e.id === state.activeChannel;
+
+                ctx.beginPath();
+                ctx.arc(ex, ey, isSelected ? 11 : 8, 0, Math.PI * 2);
+                ctx.fillStyle = isSelected ? '#a855f7' : '#1e293b';
+                ctx.fill();
+                ctx.strokeStyle = isSelected ? '#ffffff' : '#64748b';
+                ctx.lineWidth = isSelected ? 2.5 : 1.5;
+                ctx.stroke();
+
+                ctx.fillStyle = isSelected ? '#ffffff' : '#cbd5e1';
+                ctx.font = '9px JetBrains Mono';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(e.id, ex, ey);
+            });
+
+            // Click Handler
+            canvas.onclick = (evt) => {
+                const rect = canvas.getBoundingClientRect();
+                const mx = evt.clientX - rect.left;
+                const my = evt.clientY - rect.top;
+
+                ELECTRODES_1020.forEach(e => {
+                    const ex = cx + e.x * radius;
+                    const ey = cy + e.y * radius;
+                    const dist = Math.hypot(mx - ex, my - ey);
+                    if (dist < 14) {
+                        state.activeChannel = e.id;
+                        document.getElementById('selectActiveChannel').value = e.id;
+                        document.getElementById('lblActiveElectrode').innerText = e.id;
+                        renderHeadMap();
+                        updateAllVisualizations();
+                    }
+                });
+            };
+        }
+
+        function renderTopography() {
+            const canvas = document.getElementById('topographyCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width = canvas.parentElement.clientWidth;
+            const height = canvas.height = canvas.parentElement.clientHeight;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const tVector = state.trials[0].channels['P8'].tVector;
+            let sampleIdx = 0;
+            let minDiff = Infinity;
+            for (let i = 0; i < tVector.length; i++) {
+                if (Math.abs(tVector[i] - state.topographyLatency) < minDiff) {
+                    minDiff = Math.abs(tVector[i] - state.topographyLatency);
+                    sampleIdx = i;
+                }
+            }
+
+            // Interpolate 2D Grid
+            const cx = width / 2;
+            const cy = height / 2;
+            const radius = Math.min(width, height) * 0.42;
+
+            const gridRes = 35;
+            const imgData = ctx.createImageData(width, height);
+
+            for (let py = 0; py < height; py += 2) {
+                for (let px = 0; px < width; px += 2) {
+                    const nx = (px - cx) / radius;
+                    const ny = (py - cy) / radius;
+                    if (nx * nx + ny * ny <= 1.0) {
+                        // Inverse Distance Weighting (IDW) Interpolation
+                        let weightSum = 0;
+                        let valSum = 0;
+
+                        ELECTRODES_1020.forEach(e => {
+                            const val = state.grandAverages[e.id].face[sampleIdx];
+                            const dist = Math.hypot(nx - e.x, ny - e.y) + 0.001;
+                            const w = 1.0 / Math.pow(dist, 2.5);
+                            weightSum += w;
+                            valSum += val * w;
+                        });
+
+                        const interpVal = valSum / weightSum;
+                        // Map -15uV to +15uV -> Blue/Purple (Negative) to Amber/Red (Positive)
+                        const norm = Math.max(-1, Math.min(1, interpVal / 12.0));
+
+                        let r = 15, g = 23, b = 42;
+                        if (norm < 0) {
+                            const m = Math.abs(norm);
+                            r = Math.floor(168 * m);
+                            g = Math.floor(85 * m);
+                            b = Math.floor(247 * m);
+                        } else {
+                            r = Math.floor(245 * norm);
+                            g = Math.floor(158 * norm);
+                            b = Math.floor(11 * norm);
+                        }
+
+                        for (let dx = 0; dx < 2; dx++) {
+                            for (let dy = 0; dy < 2; dy++) {
+                                const idx = ((py + dy) * width + (px + dx)) * 4;
+                                imgData.data[idx] = r;
+                                imgData.data[idx + 1] = g;
+                                imgData.data[idx + 2] = b;
+                                imgData.data[idx + 3] = 255;
+                            }
+                        }
+                    }
+                }
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+
+            // Draw Head Ring
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        function initCharts() {
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.font.family = 'Inter';
+
+            // 1. ERP Chart
+            const erpCtx = document.getElementById('erpCanvas').getContext('2d');
+            erpChart = new Chart(erpCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Face Condition', data: [], borderColor: '#a855f7', borderWidth: 2.5, pointRadius: 0, tension: 0.2 },
+                        { label: 'Object Condition', data: [], borderColor: '#14b8a6', borderWidth: 2.5, pointRadius: 0, tension: 0.2 },
+                        { label: 'Difference Wave', data: [], borderColor: '#f59e0b', borderWidth: 1.5, borderDash: [4, 4], pointRadius: 0, tension: 0.2 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: { grid: { color: '#1e293b' }, title: { display: true, text: 'Time Relative to Stimulus (ms)' } },
+                        y: { grid: { color: '#1e293b' }, title: { display: true, text: 'Amplitude (µV)' }, reverse: true } // Negative Up!
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // 2. Single Trial Chart
+            const stCtx = document.getElementById('singleTrialCanvas').getContext('2d');
+            singleTrialChart = new Chart(stCtx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: 'Single Epoch', data: [], borderColor: '#a855f7', borderWidth: 1.2, pointRadius: 0 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    scales: { x: { grid: { display: false }, ticks: { font: { size: 9 } } }, y: { grid: { color: '#1e293b' }, ticks: { font: { size: 9 } } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // 3. PSD Chart
+            const psdCtx = document.getElementById('psdCanvas').getContext('2d');
+            psdChart = new Chart(psdCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Baseline (-200 to 0ms)', data: [], borderColor: '#38bdf8', borderWidth: 2, pointRadius: 0 },
+                        { label: 'Post-Stimulus (0 to 500ms)', data: [], borderColor: '#f43f5e', borderWidth: 2, pointRadius: 0 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    scales: { x: { grid: { color: '#1e293b' }, title: { display: true, text: 'Frequency (Hz)' } }, y: { grid: { color: '#1e293b' }, title: { display: true, text: 'Power (µV²/Hz)' } } },
+                    plugins: { legend: { display: true } }
+                }
+            });
+
+            // 4. Filter Response Chart
+            const fCtx = document.getElementById('filterCanvas').getContext('2d');
+            filterChart = new Chart(fCtx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: '|H(f)| Response', data: [], borderColor: '#10b981', borderWidth: 2, pointRadius: 0, backgroundColor: 'rgba(16, 185, 129, 0.15)', fill: true }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    scales: { x: { grid: { color: '#1e293b' }, ticks: { font: { size: 8 } } }, y: { grid: { color: '#1e293b' }, min: -30, max: 2, ticks: { font: { size: 8 } } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function updateAllVisualizations() {
+            const chId = state.activeChannel;
+            const ga = state.grandAverages[chId];
+            const tVector = state.trials[0].channels[chId].tVector;
+            const labelsMs = Array.from(tVector).map(t => t.toFixed(0));
+
+            // Update ERP Chart
+            erpChart.data.labels = labelsMs;
+            erpChart.data.datasets[0].data = Array.from(ga.face);
+            erpChart.data.datasets[1].data = Array.from(ga.obj);
+            erpChart.data.datasets[2].data = Array.from(ga.diff);
+            erpChart.update();
+
+            updateTrialScrubberUI();
+            updatePSDView();
+            updateFilterPlot();
+            renderTopography();
+        }
+
+        function updateKPICards() {
+            const chId = state.activeChannel;
+            const ga = state.grandAverages[chId];
+            const tVector = state.trials[0].channels[chId].tVector;
+
+            let idx170 = 0;
+            let minDiff = Infinity;
+            for (let i = 0; i < tVector.length; i++) {
+                if (Math.abs(tVector[i] - 170) < minDiff) {
+                    minDiff = Math.abs(tVector[i] - 170);
+                    idx170 = i;
+                }
+            }
+
+            const faceN170 = ga.face[idx170];
+            const objN170 = ga.obj[idx170];
+            const diffVal = ga.diff[idx170];
+
+            document.getElementById('kpiN170Face').innerText = `${faceN170.toFixed(1)} µV`;
+            document.getElementById('kpiN170Object').innerText = `${objN170.toFixed(1)} µV`;
+            document.getElementById('kpiDiff').innerText = `${diffVal.toFixed(1)} µV`;
+
+            let baselineVar = 0, count = 0;
+            for (let i = 0; i < idx170; i++) {
+                if (tVector[i] < 0) {
+                    baselineVar += ga.face[i] * ga.face[i];
+                    count++;
+                }
+            }
+            const noise = Math.sqrt(baselineVar / Math.max(1, count));
+            const snrDb = 20 * Math.log10(Math.abs(faceN170) / Math.max(0.1, noise));
+            document.getElementById('kpiSNR').innerText = `${Math.max(0, snrDb).toFixed(1)} dB`;
+        }
+
+        function updateTrialScrubberUI() {
+            const trial = state.trials[state.activeTrialIndex];
+            const chId = state.activeChannel;
+            const chData = trial.channels[chId];
+
+            document.getElementById('sliderTrialScrub').value = state.activeTrialIndex + 1;
+            document.getElementById('stimulusTimer').innerText = `Trial ${trial.id} / ${state.numTrials}`;
+            document.getElementById('singleTrialTitle').innerText = `Single Epoch Trace - Channel ${chId} / Trial #${trial.id} (${trial.condition.toUpperCase()})`;
+
+            const stimBadge = document.getElementById('stimulusConditionBadge');
+            const stimLabel = document.getElementById('stimulusLabel');
+            const stimIcon = document.getElementById('stimulusIcon');
+
+            if (trial.condition === 'face') {
+                stimBadge.className = "text-[10px] bg-purple-950 text-purple-300 font-semibold px-2 py-0.5 rounded border border-purple-800 code-font";
+                stimBadge.innerText = "FACE STIMULUS";
+                stimIcon.className = "fa-solid fa-user text-3xl text-purple-400 mb-0.5";
+                stimLabel.innerText = "Face Target";
+            } else {
+                stimBadge.className = "text-[10px] bg-teal-950 text-teal-300 font-semibold px-2 py-0.5 rounded border border-teal-800 code-font";
+                stimBadge.innerText = "OBJECT STIMULUS";
+                stimIcon.className = "fa-solid fa-cube text-3xl text-teal-400 mb-0.5";
+                stimLabel.innerText = "Object Target";
+            }
+
+            singleTrialChart.data.labels = Array.from(chData.tVector).map(t => t.toFixed(0));
+            singleTrialChart.data.datasets[0].data = Array.from(chData.filteredEpoch);
+            singleTrialChart.data.datasets[0].borderColor = (trial.condition === 'face') ? '#a855f7' : '#14b8a6';
+            singleTrialChart.update();
+        }
+
+        function renderMultiChannelMontage() {
+            const canvas = document.getElementById('multiChannelCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width = canvas.parentElement.clientWidth;
+            const height = canvas.height = canvas.parentElement.clientHeight;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const trial = state.trials[state.activeTrialIndex];
+            const numChannels = ELECTRODES_1020.length;
+            const rowHeight = height / numChannels;
+
+            document.getElementById('lblMontageTrialNum').innerText = trial.id;
+
+            ELECTRODES_1020.forEach((e, idx) => {
+                const epoch = trial.channels[e.id].filteredEpoch;
+                const yCenter = (idx + 0.5) * rowHeight;
+                const samples = epoch.length;
+                const dx = width / samples;
+
+                ctx.strokeStyle = (e.id === state.activeChannel) ? '#a855f7' : '#334155';
+                ctx.lineWidth = (e.id === state.activeChannel) ? 2.0 : 1.0;
+                ctx.beginPath();
+
+                for (let s = 0; s < samples; s++) {
+                    const x = s * dx;
+                    const y = yCenter - (epoch[s] * 0.8);
+                    if (s === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                ctx.fillStyle = (e.id === state.activeChannel) ? '#a855f7' : '#94a3b8';
+                ctx.font = '9px JetBrains Mono';
+                ctx.fillText(e.id, 5, yCenter + 3);
+            });
+        }
+
+        function renderRasterHeatmap() {
+            const canvas = document.getElementById('rasterCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width = canvas.parentElement.clientWidth;
+            const height = canvas.height = canvas.parentElement.clientHeight;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const chId = state.activeChannel;
+            const numTrials = state.numTrials;
+            const samples = state.trials[0].channels[chId].filteredEpoch.length;
+            const cellW = width / samples;
+            const cellH = height / numTrials;
+
+            const sortedTrials = [
+                ...state.trials.filter(t => t.condition === 'face'),
+                ...state.trials.filter(t => t.condition === 'object')
+            ];
+
+            for (let tr = 0; tr < numTrials; tr++) {
+                const epoch = sortedTrials[tr].channels[chId].filteredEpoch;
+                for (let s = 0; s < samples; s++) {
+                    const val = epoch[s];
+                    const norm = Math.max(-1, Math.min(1, val / 20.0));
+                    let r, g, b;
+
+                    if (norm < 0) {
+                        const m = Math.abs(norm);
+                        r = Math.floor(168 * m); g = Math.floor(85 * m); b = Math.floor(247 * m);
+                    } else {
+                        r = Math.floor(245 * norm); g = Math.floor(158 * norm); b = Math.floor(11 * norm);
+                    }
+
+                    ctx.fillStyle = `rgb(${r},${g},${b})`;
+                    ctx.fillRect(s * cellW, tr * cellH, cellW + 0.5, cellH + 0.5);
+                }
+            }
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+        }
+
+        function updatePSDView() {
+            const freqs = [];
+            const baselinePsd = [];
+            const postPsd = [];
+
+            for (let f = 1; f <= 45; f++) {
+                freqs.push(`${f} Hz`);
+                const baseVal = (20 / Math.pow(f, 0.9)) + (f >= 8 && f <= 12 ? state.alphaAmp * 0.4 : 0);
+                const postVal = (20 / Math.pow(f, 0.9)) + (f >= 8 && f <= 12 ? state.alphaAmp * 0.1 : 0);
+                baselinePsd.push(baseVal);
+                postPsd.push(postVal);
+            }
+
+            psdChart.data.labels = freqs;
+            psdChart.data.datasets[0].data = baselinePsd;
+            psdChart.data.datasets[1].data = postPsd;
+            psdChart.update();
+        }
+
+        function updateFilterPlot() {
+            const freqs = [];
+            const response = [];
+
+            for (let f = 0.1; f <= 50; f += 0.5) {
+                freqs.push(f.toFixed(1));
+                let mag = 1.0;
+                if (state.filter.active) {
+                    if (f < state.filter.hpCutoff) mag *= (f / state.filter.hpCutoff);
+                    if (f > state.filter.lpCutoff) mag *= (state.filter.lpCutoff / f);
+                    if (state.filter.notch && Math.abs(f - 50) < 3) mag *= 0.05;
+                }
+                response.push(20 * Math.log10(Math.max(0.01, mag)));
+            }
+
+            filterChart.data.labels = freqs;
+            filterChart.data.datasets[0].data = response;
+            filterChart.update();
+        }
+
+        function toggleTrialLoop() {
+            if (state.isPlayingLoop) {
+                clearInterval(state.playbackInterval);
+                state.isPlayingLoop = false;
+                document.getElementById('playIcon').className = "fa-solid fa-play text-xs";
+                document.getElementById('playText').innerText = "Run Trials Loop";
+            } else {
+                state.isPlayingLoop = true;
+                document.getElementById('playIcon').className = "fa-solid fa-pause text-xs";
+                document.getElementById('playText').innerText = "Pause Loop";
+
+                state.playbackInterval = setInterval(() => {
+                    state.activeTrialIndex = (state.activeTrialIndex + 1) % state.numTrials;
+                    updateTrialScrubberUI();
+                    if (state.audioEnabled) triggerSonificationPitch();
+                }, 800);
+            }
+        }
+
+        function toggleAudio() {
+            state.audioEnabled = !state.audioEnabled;
+            if (state.audioEnabled) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                state.audioCtx = new AudioContext();
+                document.getElementById('audioText').innerText = "Audio On";
+                document.getElementById('btnAudioToggle').className = "flex items-center space-x-1.5 text-xs font-semibold px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white rounded transition shadow";
+            } else {
+                document.getElementById('audioText').innerText = "Audio Off";
+                document.getElementById('btnAudioToggle').className = "flex items-center space-x-1.5 text-xs font-semibold px-2 py-0.5 bg-slate-800 text-slate-400 hover:text-slate-200 rounded transition shadow";
+            }
+        }
+
+        function triggerSonificationPitch() {
+            if (!state.audioCtx) return;
+            const trial = state.trials[state.activeTrialIndex];
+            const osc = state.audioCtx.createOscillator();
+            const gain = state.audioCtx.createGain();
+
+            osc.frequency.value = (trial.condition === 'face') ? 440 : 220;
+            gain.gain.value = parseFloat(document.getElementById('audioVolume').value) * 0.15;
+
+            osc.connect(gain);
+            gain.connect(state.audioCtx.destination);
+            osc.start();
+            osc.stop(state.audioCtx.currentTime + 0.12);
+        }
+    </script>
+</body>
+</html>
