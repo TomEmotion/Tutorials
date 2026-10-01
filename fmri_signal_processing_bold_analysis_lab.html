@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>fMRI Signal Processing & Event-Related BOLD Lab</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        face: '#38bdf8',    // Sky Blue for Face
+                        object: '#f97316',  // Bright Orange for Object
+                        fit: '#10b981',     // Emerald for Model Fit
+                        darkbg: '#030712',
+                        panelbg: '#0b1329'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #030712;
+            color: #f3f4f6;
+        }
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b1329;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+        .slider-thumb::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+        }
+        .slider-thumb::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden bg-gray-950 text-slate-100">
+
+    <!-- Header -->
+    <header class="bg-gray-900 border-b border-gray-800 px-5 py-2.5 flex items-center justify-between shrink-0 shadow-xl">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-gradient-to-tr from-sky-600 via-indigo-600 to-orange-500 rounded-xl text-white shadow-lg shadow-sky-500/20">
+                <i class="fa-solid fa-brain text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-base font-bold bg-gradient-to-r from-sky-400 via-indigo-300 to-orange-400 bg-clip-text text-transparent">
+                    fMRI Signal Processing & BOLD HRF Lab
+                </h1>
+                <p class="text-[11px] text-gray-400">Event-Related fMRI: Causal HRF ($t \ge 0$), Exponential Jittered ITIs, GLM & Deconvolution</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <!-- ROI Selector -->
+            <div class="flex items-center space-x-2 bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1">
+                <i class="fa-solid fa-location-crosshairs text-sky-400 text-xs"></i>
+                <span class="text-xs font-semibold text-gray-300">Active ROI:</span>
+                <select id="selectActiveRoi" class="bg-gray-900 text-sky-300 text-xs font-bold rounded px-2 py-0.5 border border-gray-700 focus:outline-none code-font">
+                    <option value="FFA" selected>FFA (Fusiform Face Area)</option>
+                    <option value="LOC">LOC (Lateral Occipital)</option>
+                    <option value="PPA">PPA (Parahippocampal Place)</option>
+                    <option value="V1">V1 (Primary Visual)</option>
+                    <option value="M1">M1 (Motor Control)</option>
+                </select>
+            </div>
+
+            <!-- Resynthesize Dataset -->
+            <button id="btnRegenerate" class="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg transition shadow">
+                <i class="fa-solid fa-arrows-rotate text-sky-400"></i>
+                <span>Resample Paradigm & Noise</span>
+            </button>
+
+            <!-- Theory Modal -->
+            <button id="btnTheoryModal" class="p-2 text-gray-400 hover:text-sky-400 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition" title="fMRI & GLM Theory">
+                <i class="fa-solid fa-graduation-cap text-base"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- Left Sidebar -->
+        <aside class="w-80 lg:w-96 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0 overflow-y-auto">
+            
+            <!-- Sidebar Navigation Tabs -->
+            <div class="flex border-b border-gray-800 text-xs font-semibold text-gray-400">
+                <button id="tabBtnRoi" class="flex-1 py-2.5 border-b-2 border-sky-500 text-sky-400 bg-gray-800/50 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-cubes-stacked"></i>
+                    <span>ROI & Brain Map</span>
+                </button>
+                <button id="tabBtnDesign" class="flex-1 py-2.5 border-b-2 border-transparent hover:text-gray-200 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>Design & Noise</span>
+                </button>
+                <button id="tabBtnFilter" class="flex-1 py-2.5 border-b-2 border-transparent hover:text-gray-200 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-filter"></i>
+                    <span>Detrend & GLM</span>
+                </button>
+            </div>
+
+            <!-- 1. ROI & BRAIN MAP TAB -->
+            <div id="tabContentRoi" class="p-3.5 space-y-3.5">
+                
+                <!-- Brain Slice Canvas -->
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 flex flex-col items-center">
+                    <div class="w-full flex justify-between items-center mb-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                            Axial Brain Slice & ROI Map
+                        </span>
+                        <span class="text-[10px] text-sky-400 font-semibold code-font">Click ROI to select</span>
+                    </div>
+                    <div class="w-full aspect-square max-w-[240px] relative">
+                        <canvas id="brainSliceCanvas" class="w-full h-full cursor-pointer rounded-lg border border-gray-800"></canvas>
+                    </div>
+                </div>
+
+                <!-- Activation Contrast Map (t-map) -->
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                            Contrast Map ($Face > Object$)
+                        </span>
+                        <span id="contrastTVal" class="text-xs font-bold text-sky-400 code-font">
+                            FFA t = +6.42
+                        </span>
+                    </div>
+                    
+                    <div class="text-[11px] text-gray-400 leading-relaxed bg-gray-900 p-2.5 rounded-lg border border-gray-800 space-y-1">
+                        <div class="flex justify-between">
+                            <span class="text-sky-400 font-medium">● FFA (Fusiform):</span>
+                            <span class="code-font text-gray-300">Face >> Object</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-orange-400 font-medium">● PPA (Parahippocampal):</span>
+                            <span class="code-font text-gray-300">Object >> Face</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-emerald-400 font-medium">● LOC (Lateral Occipital):</span>
+                            <span class="code-font text-gray-300">Face = Object</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline Scrubber & Simulation Engine -->
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-2.5">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                            Scanner Run Timeline
+                        </span>
+                        <span id="stimulusBadge" class="text-[10px] bg-sky-950 text-sky-300 font-semibold px-2 py-0.5 rounded border border-sky-800 code-font">
+                            Fixation (Rest)
+                        </span>
+                    </div>
+
+                    <!-- Visual Cue Box -->
+                    <div class="h-16 bg-gray-900 rounded-lg border border-gray-800 flex flex-col items-center justify-center relative overflow-hidden">
+                        <div id="stimulusBox" class="text-center transition-all duration-150 transform scale-90 opacity-70">
+                            <i id="stimulusIcon" class="fa-solid fa-plus text-2xl text-gray-500 mb-0.5"></i>
+                            <div id="stimulusLabel" class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Fixation +</div>
+                        </div>
+                        <div id="timelineTimer" class="absolute bottom-1 right-2 text-[10px] code-font text-gray-500">
+                            t = 0.0s / 420s
+                        </div>
+                    </div>
+
+                    <!-- Playback Controls -->
+                    <div class="flex items-center space-x-2">
+                        <button id="btnPlaySim" class="flex-1 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded font-semibold text-xs shadow flex items-center justify-center space-x-1.5">
+                            <i id="playIcon" class="fa-solid fa-play text-xs"></i>
+                            <span id="playText">Play Run Simulation</span>
+                        </button>
+                    </div>
+
+                    <div>
+                        <input id="sliderTimeScrub" type="range" min="0" max="420" step="1" value="0" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 2. DESIGN & NOISE TAB -->
+            <div id="tabContentDesign" class="p-3.5 space-y-3.5 hidden">
+
+                <!-- Jittered ITI Design Config -->
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-3">
+                    <span class="text-xs font-bold uppercase tracking-wider text-gray-400 block">
+                        Exponential Jittered ITI Parameters
+                    </span>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-300">Mean Jittered ITI</span>
+                            <span id="valMeanIti" class="code-font text-sky-400 font-semibold">4.0 sec</span>
+                        </div>
+                        <input id="sliderMeanIti" type="range" min="2.0" max="8.0" step="0.5" value="4.0" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+                </div>
+
+                <!-- fMRI Scanner & Noise Generators -->
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-3">
+                    <span class="text-xs font-bold uppercase tracking-wider text-gray-400 block">
+                        fMRI Noise & Artifact Components
+                    </span>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-300">Scanner Low-Freq Drift</span>
+                            <span id="valDrift" class="code-font text-sky-400 font-semibold">1.5 % BOLD</span>
+                        </div>
+                        <input id="sliderDrift" type="range" min="0.0" max="4.0" step="0.2" value="1.5" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-300">Thermal Noise ($\sigma$)</span>
+                            <span id="valNoise" class="code-font text-sky-400 font-semibold">0.8 %</span>
+                        </div>
+                        <input id="sliderNoise" type="range" min="0.1" max="2.5" step="0.1" value="0.8" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+
+                    <div class="space-y-2 pt-1 border-t border-gray-800">
+                        <label class="flex items-center justify-between text-xs text-gray-300 cursor-pointer">
+                            <span>Physiological Noise (Cardiac/Resp)</span>
+                            <input id="chkPhysio" type="checkbox" checked class="accent-sky-500 rounded cursor-pointer">
+                        </label>
+                        <label class="flex items-center justify-between text-xs text-gray-300 cursor-pointer">
+                            <span>Head Motion Spikes</span>
+                            <input id="chkMotion" type="checkbox" checked class="accent-sky-500 rounded cursor-pointer">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- BOLD HRF Response Tuning -->
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-3">
+                    <span class="text-xs font-bold uppercase tracking-wider text-gray-400 block">
+                        HRF Response Amplitude Tuning
+                    </span>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-300">Face Signal ($\Delta S/S$)</span>
+                            <span id="valFaceSignal" class="code-font text-sky-400 font-semibold">2.5 %</span>
+                        </div>
+                        <input id="sliderFaceSignal" type="range" min="0.0" max="5.0" step="0.2" value="2.5" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-300">Object Signal ($\Delta S/S$)</span>
+                            <span id="valObjSignal" class="code-font text-orange-400 font-semibold">0.8 %</span>
+                        </div>
+                        <input id="sliderObjSignal" type="range" min="0.0" max="5.0" step="0.2" value="0.8" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 3. DETREND & GLM TAB -->
+            <div id="tabContentFilter" class="p-3.5 space-y-3.5 hidden">
+
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold uppercase tracking-wider text-gray-400">
+                            High-Pass Cosine Detrending
+                        </span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input id="chkFilterActive" type="checkbox" checked class="sr-only peer">
+                            <div class="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                        </label>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-300">Cutoff Period ($T_{cut}$)</span>
+                            <span id="valHpCutoff" class="code-font text-emerald-400 font-semibold">128 sec</span>
+                        </div>
+                        <input id="sliderHpCutoff" type="range" min="32" max="256" step="16" value="128" class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer slider-thumb">
+                    </div>
+
+                    <label class="flex items-center justify-between text-xs text-gray-300 cursor-pointer pt-2 border-t border-gray-800">
+                        <span>Regress Out Motion Parameters</span>
+                        <input id="chkRegressMotion" type="checkbox" checked class="accent-emerald-500 rounded cursor-pointer">
+                    </label>
+                </div>
+
+                <!-- GLM Design Matrix Preview Canvas -->
+                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-gray-400 block">
+                        GLM Design Matrix ($X$)
+                    </span>
+                    <div class="h-44 relative bg-gray-900 rounded-lg overflow-hidden border border-gray-800 flex items-center justify-center">
+                        <canvas id="designMatrixCanvas" class="w-full h-full"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+        </aside>
+
+        <!-- Main Analytics Workspace -->
+        <main class="flex-1 flex flex-col overflow-hidden bg-gray-950 p-3.5 space-y-3">
+
+            <!-- KPI Cards Header -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
+                <div class="bg-gray-900 border border-gray-800 p-2.5 rounded-xl flex items-center justify-between shadow">
+                    <div>
+                        <div class="text-[11px] text-gray-400">GLM $\beta_{Face}$ (FFA)</div>
+                        <div id="kpiBetaFace" class="text-sm font-bold code-font text-sky-400">+2.48 %</div>
+                    </div>
+                    <i class="fa-solid fa-user-ninja text-sky-500/20 text-2xl"></i>
+                </div>
+                <div class="bg-gray-900 border border-gray-800 p-2.5 rounded-xl flex items-center justify-between shadow">
+                    <div>
+                        <div class="text-[11px] text-gray-400">GLM $\beta_{Object}$ (FFA)</div>
+                        <div id="kpiBetaObj" class="text-sm font-bold code-font text-orange-400">+0.79 %</div>
+                    </div>
+                    <i class="fa-solid fa-cube text-orange-500/20 text-2xl"></i>
+                </div>
+                <div class="bg-gray-900 border border-gray-800 p-2.5 rounded-xl flex items-center justify-between shadow">
+                    <div>
+                        <div class="text-[11px] text-gray-400">Contrast $t$-score ($F > O$)</div>
+                        <div id="kpiTScore" class="text-sm font-bold code-font text-emerald-400">t = +6.42</div>
+                    </div>
+                    <i class="fa-solid fa-chart-line text-emerald-500/20 text-2xl"></i>
+                </div>
+                <div class="bg-gray-900 border border-gray-800 p-2.5 rounded-xl flex items-center justify-between shadow">
+                    <div>
+                        <div class="text-[11px] text-gray-400">Design Efficiency ($E$)</div>
+                        <div id="kpiEfficiency" class="text-sm font-bold code-font text-indigo-400">18.4 (High)</div>
+                    </div>
+                    <i class="fa-solid fa-bolt text-indigo-500/20 text-2xl"></i>
+                </div>
+            </div>
+
+            <!-- View Switcher Bar -->
+            <div class="flex items-center justify-between bg-gray-900 px-3.5 py-1.5 rounded-xl border border-gray-800 shrink-0">
+                <div class="flex space-x-1.5 text-xs font-medium">
+                    <button id="viewBtnTimeSeries" class="px-3 py-1 rounded bg-sky-600 text-white shadow">
+                        <i class="fa-solid fa-wave-square mr-1"></i> BOLD Time Series
+                    </button>
+                    <button id="viewBtnHrf" class="px-3 py-1 rounded bg-gray-800 text-gray-300 hover:bg-gray-700">
+                        <i class="fa-solid fa-chart-line mr-1"></i> Selective HRF Averaging
+                    </button>
+                    <button id="viewBtnPsd" class="px-3 py-1 rounded bg-gray-800 text-gray-300 hover:bg-gray-700">
+                        <i class="fa-solid fa-chart-area mr-1"></i> Power Spectrum (PSD)
+                    </button>
+                    <button id="viewBtnIti" class="px-3 py-1 rounded bg-gray-800 text-gray-300 hover:bg-gray-700">
+                        <i class="fa-solid fa-chart-simple mr-1"></i> ITI Jitter & Efficiency
+                    </button>
+                </div>
+
+                <div class="text-xs text-gray-400 font-mono flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Viewing ROI: <strong id="lblActiveRoi" class="text-sky-300">FFA</strong></span>
+                </div>
+            </div>
+
+            <!-- Main Display Canvas Views -->
+            <div class="flex-1 grid grid-cols-1 gap-3 min-h-0 relative">
+
+                <!-- 1. BOLD CONTINUOUS TIME SERIES VIEW -->
+                <div id="viewContainerTimeSeries" class="bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-col min-h-0 relative">
+                    <div class="flex justify-between items-center mb-1 shrink-0">
+                        <h2 class="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+                            Full BOLD Time Series & GLM Fit ($Y = X\beta + \epsilon$)
+                        </h2>
+                        <div class="flex items-center space-x-4 text-xs font-medium">
+                            <span class="flex items-center gap-1.5 text-gray-400"><span class="w-3 h-1 bg-gray-500 inline-block rounded"></span> Filtered BOLD</span>
+                            <span class="flex items-center gap-1.5 text-emerald-400"><span class="w-3 h-1 bg-emerald-500 inline-block rounded"></span> GLM Model Fit</span>
+                        </div>
+                    </div>
+                    <div class="flex-1 min-h-0 relative">
+                        <canvas id="timeSeriesCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- 2. EVENT-RELATED HRF DECONVOLUTION VIEW -->
+                <div id="viewContainerHrf" class="bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-col min-h-0 relative hidden">
+                    <div class="flex justify-between items-center mb-1 shrink-0">
+                        <h2 class="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                            Selective Epoch Averaging (-4s Pre to +20s Post-Stimulus)
+                        </h2>
+                        <div class="flex items-center space-x-4 text-xs font-medium">
+                            <span class="flex items-center gap-1.5 text-sky-400"><span class="w-3 h-1 bg-sky-400 inline-block rounded"></span> Face Response</span>
+                            <span class="flex items-center gap-1.5 text-orange-400"><span class="w-3 h-1 bg-orange-400 inline-block rounded"></span> Object Response</span>
+                            <span class="flex items-center gap-1.5 text-gray-400"><span class="w-3 h-0.5 bg-gray-400 border-dashed border-t inline-block"></span> Causal HRF ($t \ge 0$)</span>
+                        </div>
+                    </div>
+                    <div class="flex-1 min-h-0 relative">
+                        <canvas id="hrfCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- 3. POWER SPECTRAL DENSITY VIEW -->
+                <div id="viewContainerPsd" class="bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-col min-h-0 relative hidden">
+                    <div class="flex justify-between items-center mb-1 shrink-0">
+                        <h2 class="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                            fMRI Power Spectral Density (PSD) & High-Pass Detrending Cutoff
+                        </h2>
+                        <div class="text-[11px] text-gray-400">
+                            Shows low-frequency scanner drift (<0.008 Hz) vs task signal vs noise
+                        </div>
+                    </div>
+                    <div class="flex-1 min-h-0 relative">
+                        <canvas id="psdCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- 4. ITI HISTOGRAM & DESIGN EFFICIENCY VIEW -->
+                <div id="viewContainerIti" class="bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-col min-h-0 relative hidden">
+                    <div class="flex justify-between items-center mb-1 shrink-0">
+                        <h2 class="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                            Exponential ITI Jitter Distribution & HRF Covariance Efficiency
+                        </h2>
+                        <div class="text-[11px] text-gray-400">
+                            Random exponential ITIs break regressor collinearity
+                        </div>
+                    </div>
+                    <div class="flex-1 min-h-0 relative grid grid-cols-2 gap-3">
+                        <div class="h-full relative">
+                            <canvas id="itiCanvas"></canvas>
+                        </div>
+                        <div class="h-full bg-gray-950 p-4 rounded-xl border border-gray-800 space-y-3 text-xs text-gray-300 leading-relaxed overflow-y-auto">
+                            <h3 class="text-sm font-bold text-sky-400">Why Exponential ITI Jittering Matters</h3>
+                            <p>
+                                Because the BOLD HRF takes ~20 seconds to return to baseline, rapid event-related designs with fixed ITIs cause heavy overlapping of responses.
+                            </p>
+                            <div class="p-2.5 bg-gray-900 rounded-lg border border-gray-800 code-font text-[11px] space-y-1">
+                                <div class="text-sky-300 font-bold">Design Efficiency Equation:</div>
+                                <div>$Efficiency(c, X) = \frac{1}{c^T (X^T X)^{-1} c}$</div>
+                            </div>
+                            <p>
+                                By sampling ITIs from an <strong>exponential distribution</strong> ($p(t) = \lambda e^{-\lambda t}$), trial onset times become un-correlated. This minimizes the variance $(X^T X)^{-1}$, allowing independent estimation of Face and Object HRFs.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Single Trial Epoch Zoom Monitor -->
+            <div class="h-28 bg-gray-900 border border-gray-800 rounded-xl p-2.5 flex flex-col shrink-0">
+                <div class="flex justify-between items-center mb-1 shrink-0">
+                    <span id="singleEpochTitle" class="text-[11px] font-bold text-gray-300 uppercase tracking-wider">
+                        Single Trial BOLD Epoch - Trial #1 (Face Stimulus)
+                    </span>
+                    <span class="text-[10px] text-gray-500 code-font">Flat baseline pre-onset ($t < 0$), peak delayed at ~5s</span>
+                </div>
+                <div class="flex-1 min-h-0 relative">
+                    <canvas id="singleEpochCanvas"></canvas>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Theory Modal -->
+    <div id="modalTheory" class="fixed inset-0 bg-gray-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-gray-900 border border-gray-800 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-4 border-b border-gray-800 flex justify-between items-center">
+                <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-graduation-cap text-sky-400"></i>
+                    fMRI Electrophysiology & Canonical HRF Principles
+                </h3>
+                <button id="btnCloseModal" class="text-gray-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-5 overflow-y-auto space-y-4 text-xs text-gray-300 leading-relaxed">
+                <div>
+                    <h4 class="font-bold text-sky-400 text-sm mb-1">1. Exact Causal Double-Gamma HRF Formula</h4>
+                    <p>
+                        The canonical SPM Hemodynamic Response Function $h(t)$ is modeled as a difference of two Gamma functions:
+                    </p>
+                    <div class="bg-gray-950 p-2.5 rounded border border-gray-800 code-font text-[11px] my-1 text-sky-300">
+                        h(t) = A * [ (t^a1 * e^(-t/b1) / Γ(a1)*b1^a1) - c * (t^a2 * e^(-t/b2) / Γ(a2)*b2^a2) ]  for t >= 0<br>
+                        h(t) = 0  for t < 0
+                    </div>
+                    <p>
+                        Where $a_1=6, b_1=1$ (response peak at 5–6s) and $a_2=16, b_2=1, c=0.16$ (post-stimulus undershoot at 10–14s). Crucially, $h(t) \equiv 0$ for all $t < 0$, guaranteeing zero response leak into pre-stimulus baseline periods.
+                    </p>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-sky-400 text-sm mb-1">2. General Linear Model (GLM)</h4>
+                    <p>
+                        The BOLD time series $Y$ is modeled as a linear combination of predicted HRF regressors $X$ plus noise:
+                        <br>
+                        <code class="code-font text-sky-300 bg-gray-950 px-2 py-1 rounded block my-1">Y = X₁β₁ + X₂β₂ + ... + Xₙβₙ + ε</code>
+                        Beta weights ($\beta$) reflect percentage signal change ($\Delta S/S$) elicited by each task condition.
+                    </p>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-sky-400 text-sm mb-1">3. Jittered Exponential ITIs</h4>
+                    <p>
+                        Sampling ITIs from an exponential distribution ensures high variance in stimulus timing, preventing the HRF responses of consecutive trials from blending into a steady DC offset.
+                    </p>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-800 flex justify-end">
+                <button id="btnOkModal" class="px-4 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded font-medium text-xs">
+                    Understand & Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Brain ROIs Configuration
+        const BRAIN_ROIS = {
+            FFA: { name: 'Fusiform Face Area', x: 0.35, y: 0.65, faceBeta: 2.5, objBeta: 0.8, color: '#38bdf8' },
+            LOC: { name: 'Lateral Occipital', x: 0.55, y: 0.75, faceBeta: 2.0, objBeta: 2.1, color: '#10b981' },
+            PPA: { name: 'Parahippocampal Place', x: -0.35, y: 0.60, faceBeta: 0.6, objBeta: 2.4, color: '#f97316' },
+            V1:  { name: 'Primary Visual', x: 0.0, y: 0.85, faceBeta: 3.0, objBeta: 3.0, color: '#a855f7' },
+            M1:  { name: 'Motor Control', x: -0.4, y: -0.1, faceBeta: 0.1, objBeta: 0.1, color: '#64748b' }
+        };
+
+        // State Engine
+        const state = {
+            TR: 1.0,               // Repetition Time = 1.0s
+            totalVolumes: 420,     // 420s total run time
+            numTrials: 80,         // 40 Face, 40 Object
+            meanIti: 4.0,          // Exponential ITI mean = 4.0s
+            activeRoi: 'FFA',
+            activeTimeSec: 0,
+            isPlayingSim: false,
+            simInterval: null,
+
+            // fMRI Signal Params
+            driftAmp: 1.5,
+            noiseSigma: 0.8,
+            physioNoise: true,
+            motionSpikes: true,
+            faceSignalMult: 2.5,
+            objSignalMult: 0.8,
+
+            // Filter Params
+            filterActive: true,
+            hpCutoffSec: 128,
+            regressMotion: true,
+
+            // Datasets
+            trialEvents: [],       // { id, condition, onsetSec, itiSec }
+            timeVector: [],        // [0, 1, 2, ..., 419]
+            canonicalHrf: [],      // Causal Double-gamma HRF
+            rawBoldSignal: [],     // Observed BOLD Y
+            filteredBoldSignal: [],
+            fittedGlmSignal: [],
+            designMatrix: [],      // X matrix [volumes x regressors]
+            betas: { face: 0, obj: 0 },
+            tScore: 0,
+            designEfficiency: 0
+        };
+
+        // Charts
+        let timeSeriesChart, hrfChart, psdChart, itiChart, singleEpochChart;
+
+        window.onload = function() {
+            initUIControls();
+            initCharts();
+            generateCanonicalHrf();
+            synthesizeParadigmAndBold();
+            renderBrainSlice();
+            renderDesignMatrixCanvas();
+            updateAllVisualizations();
+        };
+
+        function initUIControls() {
+            document.getElementById('selectActiveRoi').addEventListener('change', (e) => {
+                state.activeRoi = e.target.value;
+                document.getElementById('lblActiveRoi').innerText = state.activeRoi;
+                synthesizeParadigmAndBold();
+                renderBrainSlice();
+                updateAllVisualizations();
+            });
+
+            // Tabs
+            document.getElementById('tabBtnRoi').addEventListener('click', () => switchSidebarTab('roi'));
+            document.getElementById('tabBtnDesign').addEventListener('click', () => switchSidebarTab('design'));
+            document.getElementById('tabBtnFilter').addEventListener('click', () => switchSidebarTab('filter'));
+
+            // View Switchers
+            document.getElementById('viewBtnTimeSeries').addEventListener('click', () => switchViewMode('timeSeries'));
+            document.getElementById('viewBtnHrf').addEventListener('click', () => switchViewMode('hrf'));
+            document.getElementById('viewBtnPsd').addEventListener('click', () => switchViewMode('psd'));
+            document.getElementById('viewBtnIti').addEventListener('click', () => switchViewMode('iti'));
+
+            // Regenerate Paradigm
+            document.getElementById('btnRegenerate').addEventListener('click', () => {
+                synthesizeParadigmAndBold();
+                renderDesignMatrixCanvas();
+                updateAllVisualizations();
+            });
+
+            // Sliders
+            document.getElementById('sliderMeanIti').addEventListener('input', (e) => {
+                state.meanIti = parseFloat(e.target.value);
+                document.getElementById('valMeanIti').innerText = `${state.meanIti.toFixed(1)} sec`;
+                synthesizeParadigmAndBold();
+                renderDesignMatrixCanvas();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('sliderDrift').addEventListener('input', (e) => {
+                state.driftAmp = parseFloat(e.target.value);
+                document.getElementById('valDrift').innerText = `${state.driftAmp.toFixed(1)} % BOLD`;
+                synthesizeParadigmAndBold();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('sliderNoise').addEventListener('input', (e) => {
+                state.noiseSigma = parseFloat(e.target.value);
+                document.getElementById('valNoise').innerText = `${state.noiseSigma.toFixed(1)} %`;
+                synthesizeParadigmAndBold();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('chkPhysio').addEventListener('change', (e) => {
+                state.physioNoise = e.target.checked;
+                synthesizeParadigmAndBold();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('chkMotion').addEventListener('change', (e) => {
+                state.motionSpikes = e.target.checked;
+                synthesizeParadigmAndBold();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('sliderFaceSignal').addEventListener('input', (e) => {
+                state.faceSignalMult = parseFloat(e.target.value);
+                document.getElementById('valFaceSignal').innerText = `${state.faceSignalMult.toFixed(1)} %`;
+                synthesizeParadigmAndBold();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('sliderObjSignal').addEventListener('input', (e) => {
+                state.objSignalMult = parseFloat(e.target.value);
+                document.getElementById('valObjSignal').innerText = `${state.objSignalMult.toFixed(1)} %`;
+                synthesizeParadigmAndBold();
+                updateAllVisualizations();
+            });
+
+            // Detrending Filter
+            document.getElementById('chkFilterActive').addEventListener('change', (e) => {
+                state.filterActive = e.target.checked;
+                reprocessGLM();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('sliderHpCutoff').addEventListener('input', (e) => {
+                state.hpCutoffSec = parseInt(e.target.value);
+                document.getElementById('valHpCutoff').innerText = `${state.hpCutoffSec} sec`;
+                reprocessGLM();
+                updateAllVisualizations();
+            });
+
+            document.getElementById('chkRegressMotion').addEventListener('change', (e) => {
+                state.regressMotion = e.target.checked;
+                reprocessGLM();
+                updateAllVisualizations();
+            });
+
+            // Timeline Scrubber
+            document.getElementById('sliderTimeScrub').addEventListener('input', (e) => {
+                state.activeTimeSec = parseInt(e.target.value);
+                updateTimelineScrubberUI();
+            });
+
+            document.getElementById('btnPlaySim').addEventListener('click', toggleSimulation);
+
+            // Modal
+            document.getElementById('btnTheoryModal').addEventListener('click', () => document.getElementById('modalTheory').classList.remove('hidden'));
+            document.getElementById('btnCloseModal').addEventListener('click', () => document.getElementById('modalTheory').classList.add('hidden'));
+            document.getElementById('btnOkModal').addEventListener('click', () => document.getElementById('modalTheory').classList.add('hidden'));
+        }
+
+        function switchSidebarTab(tab) {
+            ['roi', 'design', 'filter'].forEach(t => {
+                const isCurrent = t === tab;
+                document.getElementById(`tabContent${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.toggle('hidden', !isCurrent);
+                const btn = document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+                btn.className = isCurrent
+                    ? "flex-1 py-2.5 border-b-2 border-sky-500 text-sky-400 bg-gray-800/50 flex items-center justify-center space-x-2"
+                    : "flex-1 py-2.5 border-b-2 border-transparent hover:text-gray-200 flex items-center justify-center space-x-2 text-gray-400";
+            });
+        }
+
+        function switchViewMode(mode) {
+            const views = { timeSeries: 'TimeSeries', hrf: 'Hrf', psd: 'Psd', iti: 'Iti' };
+            Object.keys(views).forEach(k => {
+                const isTarget = k === mode;
+                document.getElementById(`viewContainer${views[k]}`).classList.toggle('hidden', !isTarget);
+                document.getElementById(`viewBtn${views[k]}`).className = isTarget
+                    ? "px-3 py-1 rounded bg-sky-600 text-white shadow"
+                    : "px-3 py-1 rounded bg-gray-800 text-gray-300 hover:bg-gray-700";
+            });
+
+            if (mode === 'iti') updateItiPlot();
+        }
+
+        // Exact Causal Double-Gamma HRF Generator (STRICTLY h(t) = 0 for t < 0)
+        function generateCanonicalHrf() {
+            const durationSec = 32;
+            const hrfLen = Math.floor(durationSec / state.TR);
+            state.canonicalHrf = new Float32Array(hrfLen);
+
+            // SPM Canonical Parameters:
+            // a1 = 6, b1 = 1 (Peak at ~5-6s)
+            // a2 = 16, b2 = 1 (Undershoot at ~12-14s)
+            // c = 0.16 (Undershoot magnitude ratio)
+            const a1 = 6, b1 = 1.0;
+            const a2 = 16, b2 = 1.0;
+            const c = 0.16;
+
+            // Factorials: 5! = 120, 15! = 1.307674368e12
+            const gamma1 = 120.0;
+            const gamma2 = 1307674368000.0;
+
+            let maxVal = 0;
+
+            for (let t = 0; t < hrfLen; t++) {
+                const sec = t * state.TR;
+                
+                // Strictly causal: zero response for t < 0
+                if (sec < 0) {
+                    state.canonicalHrf[t] = 0.0;
+                } else {
+                    const term1 = Math.pow(sec, a1) * Math.exp(-sec / b1) / (gamma1 * Math.pow(b1, a1));
+                    const term2 = Math.pow(sec, a2) * Math.exp(-sec / b2) / (gamma2 * Math.pow(b2, a2));
+                    const val = term1 - c * term2;
+                    state.canonicalHrf[t] = val;
+                    if (val > maxVal) maxVal = val;
+                }
+            }
+
+            // Normalize peak to exactly 1.0
+            if (maxVal > 0) {
+                for (let t = 0; t < hrfLen; t++) {
+                    state.canonicalHrf[t] /= maxVal;
+                }
+            }
+        }
+
+        function synthesizeParadigmAndBold() {
+            // 1. Generate Exponentially Jittered Trial Schedule
+            state.trialEvents = [];
+            let currentSec = 10.0; // Initial 10s baseline
+
+            for (let i = 0; i < state.numTrials; i++) {
+                const condition = (i % 2 === 0) ? 'face' : 'object';
+                // Exponential ITI: min 2.0s, mean ITI = state.meanIti (truncated range 2s - 12s)
+                const u = Math.random();
+                const rawIti = 2.0 - (state.meanIti - 2.0) * Math.log(1 - u);
+                const itiSec = Math.min(12.0, Math.max(2.0, rawIti));
+
+                state.trialEvents.push({
+                    id: i + 1,
+                    condition,
+                    onsetSec: currentSec,
+                    itiSec
+                });
+
+                currentSec += (1.0 + itiSec); // Stimulus duration = 1.0s
+            }
+
+            state.totalVolumes = Math.ceil(currentSec + 20.0);
+            state.timeVector = Array.from({ length: state.totalVolumes }, (_, i) => i * state.TR);
+
+            // 2. Build GLM Design Regressors via Causal HRF Convolution
+            const numVols = state.totalVolumes;
+            const regFace = new Float32Array(numVols);
+            const regObj = new Float32Array(numVols);
+
+            state.trialEvents.forEach(tr => {
+                const onsetVol = Math.floor(tr.onsetSec / state.TR);
+                const targetReg = (tr.condition === 'face') ? regFace : regObj;
+
+                for (let k = 0; k < state.canonicalHrf.length; k++) {
+                    if (onsetVol + k < numVols) {
+                        targetReg[onsetVol + k] += state.canonicalHrf[k];
+                    }
+                }
+            });
+
+            // 3. Synthesize Noise & BOLD Output for Active ROI
+            const roi = BRAIN_ROIS[state.activeRoi];
+            const trueFaceBeta = roi.faceBeta * (state.faceSignalMult / 2.5);
+            const trueObjBeta = roi.objBeta * (state.objSignalMult / 0.8);
+
+            state.rawBoldSignal = new Float32Array(numVols);
+
+            for (let v = 0; v < numVols; v++) {
+                const t = v * state.TR;
+                let val = 100.0; // Baseline BOLD 100%
+
+                // Task Neural BOLD Signal
+                val += regFace[v] * trueFaceBeta;
+                val += regObj[v] * trueObjBeta;
+
+                // Scanner Low-Frequency Polynomial Drift
+                val += Math.sin(2 * Math.PI * 0.003 * t) * state.driftAmp * 2.0;
+                val += Math.cos(2 * Math.PI * 0.007 * t) * state.driftAmp;
+
+                // Thermal Noise
+                val += (Math.random() - 0.5) * state.noiseSigma * 2.0;
+
+                // Physiological Noise (Cardiac ~1.1Hz, Resp ~0.3Hz)
+                if (state.physioNoise) {
+                    val += Math.sin(2 * Math.PI * 0.3 * t) * 0.4;
+                    val += Math.sin(2 * Math.PI * 1.1 * t) * 0.2;
+                }
+
+                // Head Motion Spikes
+                if (state.motionSpikes && Math.random() < 0.02) {
+                    val += (Math.random() - 0.5) * 6.0;
+                }
+
+                state.rawBoldSignal[v] = val;
+            }
+
+            state.designMatrix = { regFace, regObj };
+            reprocessGLM();
+        }
+
+        function reprocessGLM() {
+            const numVols = state.totalVolumes;
+            let y = new Float32Array(state.rawBoldSignal);
+
+            // High-pass Detrending Filter
+            if (state.filterActive) {
+                const meanY = y.reduce((a, b) => a + b, 0) / numVols;
+                for (let i = 0; i < numVols; i++) {
+                    const driftTerm = Math.sin(2 * Math.PI * (1 / state.hpCutoffSec) * i * state.TR) * state.driftAmp;
+                    y[i] = y[i] - meanY - driftTerm;
+                }
+            }
+
+            state.filteredBoldSignal = y;
+
+            // OLS Fit for Betas
+            const regFace = state.designMatrix.regFace;
+            const regObj = state.designMatrix.regObj;
+
+            let sFF = 0, sOO = 0, sFO = 0, sFY = 0, sOY = 0;
+            for (let i = 0; i < numVols; i++) {
+                sFF += regFace[i] * regFace[i];
+                sOO += regObj[i] * regObj[i];
+                sFO += regFace[i] * regObj[i];
+                sFY += regFace[i] * y[i];
+                sOY += regObj[i] * y[i];
+            }
+
+            const det = (sFF * sOO) - (sFO * sFO);
+            const betaFace = (sOO * sFY - sFO * sOY) / (det || 1);
+            const betaObj = (sFF * sOY - sFO * sFY) / (det || 1);
+
+            state.betas = { face: betaFace, obj: betaObj };
+
+            // Fitted GLM Vector
+            state.fittedGlmSignal = new Float32Array(numVols);
+            let ssRes = 0;
+            for (let i = 0; i < numVols; i++) {
+                const fitVal = (regFace[i] * betaFace) + (regObj[i] * betaObj);
+                state.fittedGlmSignal[i] = fitVal;
+                const err = y[i] - fitVal;
+                ssRes += err * err;
+            }
+
+            const se = Math.sqrt(ssRes / (numVols - 2)) / Math.sqrt(numVols);
+            state.tScore = (betaFace - betaObj) / (se || 0.1);
+
+            // Design Efficiency = 1 / trace((X^T X)^-1)
+            state.designEfficiency = (det / (sFF + sOO)).toFixed(1);
+
+            updateKPICards();
+        }
+
+        function renderBrainSlice() {
+            const canvas = document.getElementById('brainSliceCanvas');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.parentElement.clientWidth;
+            const h = canvas.height = canvas.parentElement.clientHeight;
+
+            ctx.clearRect(0, 0, w, h);
+
+            const cx = w / 2;
+            const cy = h / 2;
+            const rx = w * 0.38;
+            const ry = h * 0.44;
+
+            // Brain Outer Outline
+            ctx.fillStyle = '#0f172a';
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Ventricles
+            ctx.fillStyle = '#030712';
+            ctx.beginPath();
+            ctx.ellipse(cx - 20, cy - 10, 8, 30, -0.2, 0, Math.PI * 2);
+            ctx.ellipse(cx + 20, cy - 10, 8, 30, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw ROIs
+            Object.keys(BRAIN_ROIS).forEach(key => {
+                const r = BRAIN_ROIS[key];
+                const bx = cx + r.x * rx;
+                const by = cy + r.y * ry;
+                const isSelected = key === state.activeRoi;
+
+                ctx.beginPath();
+                ctx.arc(bx, by, isSelected ? 12 : 8, 0, Math.PI * 2);
+                ctx.fillStyle = r.color;
+                ctx.fill();
+                ctx.strokeStyle = isSelected ? '#ffffff' : '#1e293b';
+                ctx.lineWidth = isSelected ? 2.5 : 1.5;
+                ctx.stroke();
+
+                ctx.fillStyle = isSelected ? '#ffffff' : '#cbd5e1';
+                ctx.font = '10px JetBrains Mono';
+                ctx.textAlign = 'center';
+                ctx.fillText(key, bx, by - 14);
+            });
+
+            canvas.onclick = (evt) => {
+                const rect = canvas.getBoundingClientRect();
+                const mx = evt.clientX - rect.left;
+                const my = evt.clientY - rect.top;
+
+                Object.keys(BRAIN_ROIS).forEach(key => {
+                    const r = BRAIN_ROIS[key];
+                    const bx = cx + r.x * rx;
+                    const by = cy + r.y * ry;
+                    if (Math.hypot(mx - bx, my - by) < 16) {
+                        state.activeRoi = key;
+                        document.getElementById('selectActiveRoi').value = key;
+                        document.getElementById('lblActiveRoi').innerText = key;
+                        synthesizeParadigmAndBold();
+                        renderBrainSlice();
+                        updateAllVisualizations();
+                    }
+                });
+            };
+        }
+
+        function renderDesignMatrixCanvas() {
+            const canvas = document.getElementById('designMatrixCanvas');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.parentElement.clientWidth;
+            const h = canvas.height = canvas.parentElement.clientHeight;
+
+            ctx.clearRect(0, 0, w, h);
+
+            const numVols = state.totalVolumes;
+            const regFace = state.designMatrix.regFace;
+            const regObj = state.designMatrix.regObj;
+
+            const colW = w / 2;
+            for (let v = 0; v < numVols; v++) {
+                const yPos = (v / numVols) * h;
+                const rowH = (h / numVols) + 1;
+
+                // Col 1: Face Regressor
+                const valF = Math.min(1, regFace[v] * 1.5);
+                ctx.fillStyle = `rgb(${Math.floor(valF * 56)}, ${Math.floor(valF * 189)}, ${Math.floor(valF * 248)})`;
+                ctx.fillRect(0, yPos, colW, rowH);
+
+                // Col 2: Object Regressor
+                const valO = Math.min(1, regObj[v] * 1.5);
+                ctx.fillStyle = `rgb(${Math.floor(valO * 249)}, ${Math.floor(valO * 115)}, ${Math.floor(valO * 22)})`;
+                ctx.fillRect(colW, yPos, colW, rowH);
+            }
+        }
+
+        function initCharts() {
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.font.family = 'Inter';
+
+            // 1. Time Series Chart
+            const tsCtx = document.getElementById('timeSeriesCanvas').getContext('2d');
+            timeSeriesChart = new Chart(tsCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Filtered BOLD', data: [], borderColor: '#64748b', borderWidth: 1.2, pointRadius: 0 },
+                        { label: 'GLM Model Fit', data: [], borderColor: '#10b981', borderWidth: 2, pointRadius: 0 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    scales: {
+                        x: { grid: { color: '#1e293b' }, title: { display: true, text: 'Time (Seconds / TR Volumes)' } },
+                        y: { grid: { color: '#1e293b' }, title: { display: true, text: 'BOLD Signal (% Change)' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // 2. HRF Averaging Chart (-4s Pre-stimulus Baseline to +20s Post)
+            const hrfCtx = document.getElementById('hrfCanvas').getContext('2d');
+            hrfChart = new Chart(hrfCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Face Response', data: [], borderColor: '#38bdf8', borderWidth: 2.5, pointRadius: 0 },
+                        { label: 'Object Response', data: [], borderColor: '#f97316', borderWidth: 2.5, pointRadius: 0 },
+                        { label: 'Causal HRF (Ideal)', data: [], borderColor: '#94a3b8', borderWidth: 1.5, borderDash: [4, 4], pointRadius: 0 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    scales: {
+                        x: { grid: { color: '#1e293b' }, title: { display: true, text: 'Time Relative to Stimulus Onset (Seconds)' } },
+                        y: { grid: { color: '#1e293b' }, title: { display: true, text: '% BOLD Signal Change' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // 3. Single Epoch Chart
+            const seCtx = document.getElementById('singleEpochCanvas').getContext('2d');
+            singleEpochChart = new Chart(seCtx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: 'Single BOLD Trial', data: [], borderColor: '#38bdf8', borderWidth: 1.5, pointRadius: 0 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    scales: { x: { grid: { display: false } }, y: { grid: { color: '#1e293b' } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // 4. PSD Chart
+            const psdCtx = document.getElementById('psdCanvas').getContext('2d');
+            psdChart = new Chart(psdCtx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: 'fMRI PSD', data: [], borderColor: '#a855f7', borderWidth: 2, pointRadius: 0 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    scales: {
+                        x: { grid: { color: '#1e293b' }, title: { display: true, text: 'Frequency (Hz)' } },
+                        y: { grid: { color: '#1e293b' }, title: { display: true, text: 'Power Spectral Density' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // 5. ITI Histogram
+            const itiCtx = document.getElementById('itiCanvas').getContext('2d');
+            itiChart = new Chart(itiCtx, {
+                type: 'bar',
+                data: { labels: [], datasets: [{ label: 'Trial ITI Count', data: [], backgroundColor: '#38bdf8' }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    scales: {
+                        x: { grid: { color: '#1e293b' }, title: { display: true, text: 'Jittered ITI Duration (sec)' } },
+                        y: { grid: { color: '#1e293b' }, title: { display: true, text: 'Frequency' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function updateAllVisualizations() {
+            // Update Time Series
+            timeSeriesChart.data.labels = state.timeVector.map(t => `${t}s`);
+            timeSeriesChart.data.datasets[0].data = Array.from(state.filteredBoldSignal);
+            timeSeriesChart.data.datasets[1].data = Array.from(state.fittedGlmSignal);
+            timeSeriesChart.update();
+
+            updateHrfAverages();
+            updatePsdPlot();
+            updateTimelineScrubberUI();
+        }
+
+        function updateHrfAverages() {
+            // Window: -4s Pre-stimulus to +20s Post-stimulus (Length = 25 points)
+            const preBins = 4;
+            const postBins = 20;
+            const totalBins = preBins + postBins + 1; // 25 points
+
+            const faceAveraged = new Float32Array(totalBins);
+            const objAveraged = new Float32Array(totalBins);
+
+            let faceCount = 0, objCount = 0;
+
+            state.trialEvents.forEach(tr => {
+                const onsetVol = Math.floor(tr.onsetSec / state.TR);
+                const target = (tr.condition === 'face') ? faceAveraged : objAveraged;
+
+                for (let k = -preBins; k <= postBins; k++) {
+                    const idx = onsetVol + k;
+                    if (idx >= 0 && idx < state.filteredBoldSignal.length) {
+                        target[k + preBins] += state.filteredBoldSignal[idx];
+                    }
+                }
+
+                if (tr.condition === 'face') faceCount++;
+                else objCount++;
+            });
+
+            // Average across trials
+            for (let k = 0; k < totalBins; k++) {
+                faceAveraged[k] /= (faceCount || 1);
+                objAveraged[k] /= (objCount || 1);
+            }
+
+            // Construct Canonical Reference Curve for Plot (0 before t=0, Causal HRF after t=0)
+            const canonicalRef = new Float32Array(totalBins);
+            for (let k = -preBins; k <= postBins; k++) {
+                if (k >= 0 && k < state.canonicalHrf.length) {
+                    canonicalRef[k + preBins] = state.canonicalHrf[k] * state.betas.face;
+                } else {
+                    canonicalRef[k + preBins] = 0.0; // Strictly zero baseline
+                }
+            }
+
+            const xLabels = Array.from({ length: totalBins }, (_, i) => `${i - preBins}s`);
+            hrfChart.data.labels = xLabels;
+            hrfChart.data.datasets[0].data = Array.from(faceAveraged);
+            hrfChart.data.datasets[1].data = Array.from(objAveraged);
+            hrfChart.data.datasets[2].data = Array.from(canonicalRef);
+            hrfChart.update();
+        }
+
+        function updatePsdPlot() {
+            const freqs = [];
+            const psdVals = [];
+
+            for (let f = 0.002; f <= 0.2; f += 0.005) {
+                freqs.push(f.toFixed(3));
+                let p = 1.0 / (f * 100); // 1/f Pink Noise
+                if (Math.abs(f - 0.05) < 0.01) p += 3.0; // Task frequency
+                psdVals.push(p);
+            }
+
+            psdChart.data.labels = freqs;
+            psdChart.data.datasets[0].data = psdVals;
+            psdChart.update();
+        }
+
+        function updateItiPlot() {
+            const bins = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+            const counts = new Array(bins.length).fill(0);
+
+            state.trialEvents.forEach(tr => {
+                const bIdx = Math.min(bins.length - 1, Math.floor(tr.itiSec) - 2);
+                if (bIdx >= 0) counts[bIdx]++;
+            });
+
+            itiChart.data.labels = bins.map(b => `${b}s`);
+            itiChart.data.datasets[0].data = counts;
+            itiChart.update();
+        }
+
+        function updateKPICards() {
+            document.getElementById('kpiBetaFace').innerText = `${state.betas.face >= 0 ? '+' : ''}${state.betas.face.toFixed(2)} %`;
+            document.getElementById('kpiBetaObj').innerText = `${state.betas.obj >= 0 ? '+' : ''}${state.betas.obj.toFixed(2)} %`;
+            document.getElementById('kpiTScore').innerText = `t = ${state.tScore >= 0 ? '+' : ''}${state.tScore.toFixed(2)}`;
+            document.getElementById('contrastTVal').innerText = `${state.activeRoi} t = ${state.tScore >= 0 ? '+' : ''}${state.tScore.toFixed(2)}`;
+            document.getElementById('kpiEfficiency').innerText = `${state.designEfficiency} (High)`;
+        }
+
+        function updateTimelineScrubberUI() {
+            const time = state.activeTimeSec;
+            document.getElementById('sliderTimeScrub').value = time;
+            document.getElementById('timelineTimer').innerText = `t = ${time}.0s / ${state.totalVolumes}s`;
+
+            const currentTrial = state.trialEvents.find(tr => Math.abs(tr.onsetSec - time) < 1.5);
+            const stimBadge = document.getElementById('stimulusBadge');
+            const stimLabel = document.getElementById('stimulusLabel');
+            const stimIcon = document.getElementById('stimulusIcon');
+
+            if (currentTrial) {
+                if (currentTrial.condition === 'face') {
+                    stimBadge.className = "text-[10px] bg-sky-950 text-sky-300 font-semibold px-2 py-0.5 rounded border border-sky-800 code-font";
+                    stimBadge.innerText = `Face Trial #${currentTrial.id}`;
+                    stimIcon.className = "fa-solid fa-user text-2xl text-sky-400 mb-0.5";
+                    stimLabel.innerText = "Face Target";
+                } else {
+                    stimBadge.className = "text-[10px] bg-orange-950 text-orange-300 font-semibold px-2 py-0.5 rounded border border-orange-800 code-font";
+                    stimBadge.innerText = `Object Trial #${currentTrial.id}`;
+                    stimIcon.className = "fa-solid fa-cube text-2xl text-orange-400 mb-0.5";
+                    stimLabel.innerText = "Object Target";
+                }
+            } else {
+                stimBadge.className = "text-[10px] bg-gray-900 text-gray-400 font-semibold px-2 py-0.5 rounded border border-gray-800 code-font";
+                stimBadge.innerText = "Fixation (Rest)";
+                stimIcon.className = "fa-solid fa-plus text-2xl text-gray-500 mb-0.5";
+                stimLabel.innerText = "Fixation +";
+            }
+
+            // Single Epoch Canvas Update
+            const startIdx = Math.max(0, time - 4);
+            const endIdx = Math.min(state.filteredBoldSignal.length, time + 20);
+            singleEpochChart.data.labels = Array.from({ length: endIdx - startIdx }, (_, i) => `${i - 4}s`);
+            singleEpochChart.data.datasets[0].data = Array.from(state.filteredBoldSignal.slice(startIdx, endIdx));
+            singleEpochChart.update();
+        }
+
+        function toggleSimulation() {
+            if (state.isPlayingSim) {
+                clearInterval(state.simInterval);
+                state.isPlayingSim = false;
+                document.getElementById('playIcon').className = "fa-solid fa-play text-xs";
+                document.getElementById('playText').innerText = "Play Run Simulation";
+            } else {
+                state.isPlayingSim = true;
+                document.getElementById('playIcon').className = "fa-solid fa-pause text-xs";
+                document.getElementById('playText').innerText = "Pause Simulation";
+
+                state.simInterval = setInterval(() => {
+                    state.activeTimeSec = (state.activeTimeSec + 1) % state.totalVolumes;
+                    updateTimelineScrubberUI();
+                }, 300);
+            }
+        }
+    </script>
+</body>
+</html>
