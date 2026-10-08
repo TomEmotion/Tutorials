@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Permutation Testing Simulation</title>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --group-a: #2563eb;
+            --group-b: #dc2626;
+            --group-a-bg: rgba(37, 99, 235, 0.04);
+            --group-b-bg: rgba(220, 38, 38, 0.04);
+            --border-color: #e2e8f0;
+            --accent: #1e293b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            padding: 24px;
+        }
+
+        /* Top Layout: Left and Right Panels */
+        .top-panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+        }
+
+        /* Left Panel - Dot Plots */
+        .dotplot-container {
+            background: #f1f5f9;
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .group-row {
+            background: rgba(255,255,255,0.7);
+            border-radius: 8px;
+            padding: 12px;
+            position: relative;
+        }
+
+        .group-label {
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .group-label.a { color: var(--group-a); }
+        .group-label.b { color: var(--group-b); }
+
+        .svg-container {
+            width: 100%;
+            height: 60px;
+        }
+
+        .axis-label {
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Right Panel - Distribution Graph */
+        .dist-container {
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            position: relative;
+        }
+
+        /* Stats Row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .stat-box {
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 8px;
+            text-align: center;
+        }
+
+        .stat-box.highlight-blue { background: rgba(37, 99, 235, 0.03); border-color: rgba(37, 99, 235, 0.2); }
+        .stat-box.highlight-green { background: rgba(34, 197, 94, 0.03); border-color: rgba(34, 197, 94, 0.2); }
+
+        .stat-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .stat-box.highlight-blue .stat-label { color: var(--group-a); }
+        .stat-box.highlight-green .stat-label { color: #16a34a; }
+
+        .stat-value {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        /* Sliders Controls Grid with Shading */
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        .control-item {
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        /* Shading Blocks */
+        .group-a-shaded { background-color: var(--group-a-bg); }
+        .group-b-shaded { background-color: var(--group-b-bg); }
+        .neutral-shaded { background-color: #ffffff; border-top: 1px solid var(--border-color); }
+
+        .control-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            font-weight: 700;
+            color: #475569;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .control-header span.val {
+            font-weight: 600;
+            color: var(--text-main);
+            text-transform: none;
+        }
+
+        input[type=range] {
+            width: 100%;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        /* Shared layout configurations for controls */
+        .group-a-shaded input[type=range] { accent-color: var(--group-a); }
+        .group-b-shaded input[type=range] { accent-color: var(--group-b); }
+
+        /* Actions/Buttons Row */
+        .buttons-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            outline: none;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: #475569;
+        }
+        .btn-outline:hover {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+        }
+
+        .btn-primary {
+            background: var(--group-a);
+            color: white;
+        }
+        .btn-primary:hover { background: #1d4ed8; }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: var(--text-main);
+        }
+        .btn-secondary:hover { background: #cbd5e1; }
+
+        .btn-active {
+            background: #ef4444;
+            color: white;
+        }
+
+        .ml-auto {
+            margin-left: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Top Row Graph Interface -->
+    <div class="top-panels">
+        <!-- Left Side: Data Dot Plots -->
+        <div>
+            <div class="panel-title">Current Reassignment Groups</div>
+            <div class="dotplot-container">
+                <div class="group-row">
+                    <div class="group-label a">Group A</div>
+                    <svg id="svg-group-a" class="svg-container"></svg>
+                </div>
+                <div class="group-row">
+                    <div class="group-label b">Group B</div>
+                    <svg id="svg-group-b" class="svg-container"></svg>
+                </div>
+                <div>
+                    <svg id="svg-axis" style="width:100%; height:20px;"></svg>
+                    <div class="axis-label">Participant Reaction Time (ms)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side: Null Distribution -->
+        <div>
+            <div class="panel-title" id="dist-title">Permutation Mean RT Diff Distribution (0 runs)</div>
+            <div class="dist-container">
+                <svg id="svg-dist" style="width:100%; height:175px;"></svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- Metrics Row Boxes -->
+    <div class="stats-row">
+        <div class="stat-box highlight-blue">
+            <div class="stat-label">True Mean RT Diff</div>
+            <div class="stat-value" id="stat-true-diff">40.0 ms</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">Observed Δ Mean</div>
+            <div class="stat-value" id="stat-obs-diff">0.0 ms</div>
+        </div>
+        <div class="stat-box highlight-green">
+            <div class="stat-label">Shuffled Mean Diff</div>
+            <div class="stat-value" id="stat-shuff-diff">---</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">Classic T-Test</div>
+            <div class="stat-value" id="stat-classic-t" style="font-size:13px; line-height: 1.2;">t(0) = 0.00,<br>p = 1.000</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">Permutation P-Value</div>
+            <div class="stat-value" id="stat-perm-p">---</div>
+        </div>
+    </div>
+
+    <!-- Sliders Module Component Grid -->
+    <div class="controls-grid">
+        <!-- Row 1: Group A Mean & SD -->
+        <div class="control-item group-a-shaded">
+            <div class="control-header">Group A Mean RT <span class="val" id="lbl-mu-a">400 ms</span></div>
+            <input type="range" id="sld-mu-a" min="300" max="600" step="5" value="400">
+        </div>
+        <div class="control-item group-a-shaded">
+            <div class="control-header">Group A SD <span class="val" id="lbl-sd-a">50 ms</span></div>
+            <input type="range" id="sld-sd-a" min="10" max="150" step="5" value="50">
+        </div>
+
+        <!-- Row 2: Group A Size & Skewness -->
+        <div class="control-item group-a-shaded">
+            <div class="control-header">Group A Size (N1) <span class="val" id="lbl-n-a">25</span></div>
+            <input type="range" id="sld-n-a" min="10" max="100" step="1" value="25">
+        </div>
+        <div class="control-item neutral-shaded">
+            <div class="control-header">Skewness <span class="val" id="lbl-skew">0.4</span></div>
+            <input type="range" id="sld-skew" min="-3" max="3" step="0.1" value="0.4">
+        </div>
+
+        <div class="control-item group-b-shaded">
+            <div class="control-header">Group B Mean RT <span class="val" id="lbl-mu-b">440 ms</span></div>
+            <input type="range" id="sld-mu-b" min="300" max="600" step="5" value="440">
+        </div>
+        <div class="control-item group-b-shaded">
+            <div class="control-header">Group B SD <span class="val" id="lbl-sd-b">50 ms</span></div>
+            <input type="range" id="sld-sd-b" min="10" max="150" step="5" value="50">
+        </div>
+
+        <div class="control-item group-b-shaded">
+            <div class="control-header">Group B Size (N2) <span class="val" id="lbl-n-b">25</span></div>
+            <input type="range" id="sld-n-b" min="10" max="100" step="1" value="25">
+        </div>
+        <div class="control-item neutral-shaded">
+            <div class="control-header">Kurtosis <span class="val" id="lbl-kurt">0.0</span></div>
+            <input type="range" id="sld-kurt" min="-2" max="10" step="0.2" value="0.0">
+        </div>
+    </div>
+
+    <div class="buttons-row">
+        <button class="btn btn-outline" id="btn-reset">Reset Data</button>
+        <button class="btn btn-secondary" id="btn-step">Single Step</button>
+        <button class="btn btn-secondary" id="btn-loop">Continuous Single Steps</button>
+        <button class="btn btn-secondary ml-auto" id="btn-1000">+1,000 Runs</button>
+    </div>
+</div>
+
+<script>
+    let originalData = [];
+    let currentShuffledData = [];
+    let permutationHistory = [];
+    let obsDeltaMean = 0;
+    let loopInterval = null;
+
+    const MIN_X = 150;
+    const MAX_X = 650;
+
+    const sldMuA = document.getElementById('sld-mu-a');
+    const sldSdA = document.getElementById('sld-sd-a');
+    const sldNa = document.getElementById('sld-n-a');
+    const sldMuB = document.getElementById('sld-mu-b');
+    const sldSdB = document.getElementById('sld-sd-b');
+    const sldNb = document.getElementById('sld-n-b');
+    const sldSkew = document.getElementById('sld-skew');
+    const sldKurt = document.getElementById('sld-kurt');
+
+    const lblMuA = document.getElementById('lbl-mu-a');
+    const lblSdA = document.getElementById('lbl-sd-a');
+    const lblNa = document.getElementById('lbl-n-a');
+    const lblMuB = document.getElementById('lbl-mu-b');
+    const lblSdB = document.getElementById('lbl-sd-b');
+    const lblNb = document.getElementById('lbl-n-b');
+    const lblSkew = document.getElementById('lbl-skew');
+    const lblKurt = document.getElementById('lbl-kurt');
+
+    const statTrueDiff = document.getElementById('stat-true-diff');
+    const statObsDiff = document.getElementById('stat-obs-diff');
+    const statShuffDiff = document.getElementById('stat-shuff-diff');
+    const statClassicT = document.getElementById('stat-classic-t');
+    const statPermP = document.getElementById('stat-perm-p');
+    const distTitle = document.getElementById('dist-title');
+
+    const btnReset = document.getElementById('btn-reset');
+    const btnStep = document.getElementById('btn-step');
+    const btnLoop = document.getElementById('btn-loop');
+    const btn1000 = document.getElementById('btn-1000');
+
+    function generateFleishmanPoints(mean, sd, n, skew, kurt) {
+        let points = [];
+        for(let i=0; i<n; i++) {
+            let u1 = Math.random();
+            let u2 = Math.random();
+            let z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+            
+            let val = z;
+            if (skew > 0) {
+                val = (Math.exp(0.3 * skew * z) - 1) / (0.3 * skew);
+            } else if (skew < 0) {
+                let absSkew = Math.abs(skew);
+                val = -((Math.exp(0.3 * absSkew * (-z)) - 1) / (0.3 * absSkew));
+            }
+            
+            if (kurt > 0) {
+                val = val * (1 + 0.05 * kurt * (val * val));
+            }
+
+            let finalVal = mean + (val * sd);
+            finalVal = Math.max(MIN_X + 10, Math.min(MAX_X - 10, finalVal));
+            points.push(Math.round(finalVal));
+        }
+        return points;
+    }
+
+    function initData() {
+        const muA = parseFloat(sldMuA.value);
+        const sdA = parseFloat(sldSdA.value);
+        const nA = parseInt(sldNa.value);
+        const muB = parseFloat(sldMuB.value);
+        const sdB = parseFloat(sldSdB.value);
+        const nB = parseInt(sldNb.value);
+        const skew = parseFloat(sldSkew.value);
+        const kurt = parseFloat(sldKurt.value);
+
+        lblMuA.innerText = muA + " ms";
+        lblSdA.innerText = sdA + " ms";
+        lblNa.innerText = nA;
+        lblMuB.innerText = muB + " ms";
+        lblSdB.innerText = sdB + " ms";
+        lblNb.innerText = nB;
+        lblSkew.innerText = skew;
+        lblKurt.innerText = kurt;
+
+        statTrueDiff.innerText = (muB - muA).toFixed(1) + " ms";
+
+        let ptsA = generateFleishmanPoints(muA, sdA, nA, skew, kurt);
+        let ptsB = generateFleishmanPoints(muB, sdB, nB, skew, kurt);
+
+        originalData = [];
+        ptsA.forEach(v => originalData.push({val: v, trueGroup: 'A'}));
+        ptsB.forEach(v => originalData.push({val: v, trueGroup: 'B'}));
+
+        permutationHistory = [];
+        currentShuffledData = originalData.map(d => d.trueGroup);
+
+        calculateObservedMetrics();
+        renderAll();
+    }
+
+    function calculateObservedMetrics() {
+        let sumA = 0, countA = 0;
+        let sumB = 0, countB = 0;
+        let valuesA = [], valuesB = [];
+
+        originalData.forEach(d => {
+            if(d.trueGroup === 'A') {
+                sumA += d.val; countA++; valuesA.push(d.val);
+            } else {
+                sumB += d.val; countB++; valuesB.push(d.val);
+            }
+        });
+
+        let meanA = sumA / countA;
+        let meanB = sumB / countB;
+        obsDeltaMean = meanB - meanA;
+        statObsDiff.innerText = obsDeltaMean.toFixed(1) + " ms";
+
+        let varA = valuesA.reduce((s, v) => s + Math.pow(v - meanA, 2), 0) / (countA - 1);
+        let varB = valuesB.reduce((s, v) => s + Math.pow(v - meanB, 2), 0) / (countB - 1);
+        let df = countA + countB - 2;
+        let pooledSed = Math.sqrt((varA / countA) + (varB / countB));
+        let tValue = (meanB - meanA) / pooledSed;
+
+        let pValue = 2 * (1 - tDistributionCDF(Math.abs(tValue), df));
+        statClassicT.innerHTML = `t(${df}) = ${tValue.toFixed(2)},<br>p = ${pValue.toFixed(3)}`;
+
+        statShuffDiff.innerText = "---";
+        statPermP.innerText = "---";
+        distTitle.innerText = "Permutation Mean RT Diff Distribution (0 runs)";
+    }
+
+    function tDistributionCDF(t, df) {
+        let x = df / (df + t * t);
+        return 1 - 0.5 * ibeta(0.5 * df, 0.5, x);
+    }
+
+    function ibeta(a, b, x) {
+        if (x === 0) return 0;
+        if (x === 1) return 1;
+        let lbeta = Math.lgamma(a) + Math.lgamma(b) - Math.lgamma(a + b);
+        let front = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - lbeta) / a;
+        
+        let f = 1, c = 1, d = 0;
+        for (let i = 0; i <= 60; i++) {
+            let m = i / 2;
+            let numer = 0;
+            if (i === 0) numer = 1;
+            else if (i % 2 === 0) numer = (m * (b - m) * x) / ((a + 2 * m - 1) * (a + 2 * m));
+            else numer = -((a + m) * (a + b + m) * x) / ((a + 2 * m) * (a + 2 * m + 1));
+            
+            d = 1 + numer * d;
+            if (Math.abs(d) < 1e-30) d = 1e-30;
+            d = 1 / d;
+            c = 1 + numer / c;
+            if (Math.abs(c) < 1e-30) c = 1e-30;
+            f = f * d * c;
+        }
+        return front * (f - 1);
+    }
+
+    Math.lgamma = function(x) {
+        let j = 0, c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
+        if (x < 0) return NaN;
+        let y = x, tmp = x + 5.5;
+        tmp -= (x + 0.5) * Math.log(tmp);
+        let ser = 1.000000000190015;
+        for (j = 0; j <= 5; j++) ser += c[j] / ++y;
+        return -tmp + Math.log(2.5066282746310005 * ser / x);
+    };
+
+    function runSinglePermutation() {
+        for (let i = currentShuffledData.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [currentShuffledData[i], currentShuffledData[j]] = [currentShuffledData[j], currentShuffledData[i]];
+        }
+
+        let sumA = 0, countA = 0;
+        let sumB = 0, countB = 0;
+
+        originalData.forEach((d, idx) => {
+            if(currentShuffledData[idx] === 'A') {
+                sumA += d.val; countA++;
+            } else {
+                sumB += d.val; countB++;
+            }
+        });
+
+        let shuffDiff = (sumB / countB) - (sumA / countA);
+        permutationHistory.push(shuffDiff);
+        
+        statShuffDiff.innerText = shuffDiff.toFixed(1) + " ms";
+        updatePermutationPValue();
+    }
+
+    function runBatchPermutations(count) {
+        let itemsCount = originalData.length;
+        let labels = originalData.map(d => d.trueGroup);
+
+        for(let k=0; k<count; k++) {
+            for (let i = itemsCount - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                let tmp = labels[i]; labels[i] = labels[j]; labels[j] = tmp;
+            }
+
+            let sumA = 0, countA = 0;
+            let sumB = 0, countB = 0;
+            for(let i=0; i<itemsCount; i++) {
+                if(labels[i] === 'A') { sumA += originalData[i].val; countA++; }
+                else { sumB += originalData[i].val; countB++; }
+            }
+            permutationHistory.push((sumB / countB) - (sumA / countA));
+        }
+
+        currentShuffledData = [...labels];
+        if(permutationHistory.length > 0) {
+            statShuffDiff.innerText = permutationHistory[permutationHistory.length - 1].toFixed(1) + " ms";
+        }
+        updatePermutationPValue();
+    }
+
+    function updatePermutationPValue() {
+        let total = permutationHistory.length;
+        distTitle.innerText = `Permutation Mean RT Diff Distribution (${total.toLocaleString()} run${total === 1 ? '' : 's'})`;
+
+        let extremeCount = permutationHistory.filter(diff => Math.abs(diff) >= Math.abs(obsDeltaMean)).length;
+        let pVal = extremeCount / total;
+        statPermP.innerText = pVal.toFixed(3);
+    }
+
+    function renderAll() {
+        renderDotPlot('svg-group-a', 'A');
+        renderDotPlot('svg-group-b', 'B');
+        renderAxis();
+        renderDistributionGraph();
+    }
+
+    function renderAxis() {
+        const svg = document.getElementById('svg-axis');
+        svg.innerHTML = '';
+        const width = svg.clientWidth || 400;
+        
+        for(let val = 200; val <= 600; val += 100) {
+            let cx = ((val - MIN_X) / (MAX_X - MIN_X)) * width;
+            let text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            text.setAttribute("x", cx);
+            text.setAttribute("y", 14);
+            text.setAttribute("font-size", "10px");
+            text.setAttribute("fill", "#64748b");
+            text.setAttribute("text-anchor", "middle");
+            text.textContent = val;
+            svg.appendChild(text);
+        }
+    }
+
+    function renderDotPlot(svgId, targetGroup) {
+        const svg = document.getElementById(svgId);
+        svg.innerHTML = '';
+        const width = svg.clientWidth || 400;
+        const height = svg.clientHeight || 60;
+
+        let colCounts = {};
+
+        originalData.forEach((d, idx) => {
+            if(currentShuffledData[idx] !== targetGroup) return;
+
+            let cx = ((d.val - MIN_X) / (MAX_X - MIN_X)) * width;
+            let bucket = Math.round(cx / 6) * 6;
+            colCounts[bucket] = (colCounts[bucket] || 0) + 1;
+            let cy = height - 10 - (colCounts[bucket] * 5);
+
+            let circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("cx", cx);
+            circle.setAttribute("cy", cy);
+            circle.setAttribute("r", 4);
+            circle.setAttribute("fill", d.trueGroup === 'A' ? 'var(--group-a)' : 'var(--group-b)');
+            circle.setAttribute("opacity", "0.85");
+            svg.appendChild(circle);
+        });
+    }
+
+    function renderDistributionGraph() {
+        const svg = document.getElementById('svg-dist');
+        svg.innerHTML = '';
+        const width = svg.clientWidth || 400;
+        const height = svg.clientHeight || 175;
+
+        let baseLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        baseLine.setAttribute("x1", 20);
+        baseLine.setAttribute("y1", height - 25);
+        baseLine.setAttribute("x2", width - 20);
+        baseLine.setAttribute("y2", height - 25);
+        baseLine.setAttribute("stroke", "#cbd5e1");
+        svg.appendChild(baseLine);
+
+        const minDomain = -60;
+        const maxDomain = 60;
+        function getX(v) {
+            return 20 + ((v - minDomain) / (maxDomain - minDomain)) * (width - 40);
+        }
+
+        let xLabels = [-40, -20, 0, 20, 40];
+        xLabels.forEach(xl => {
+            let cx = getX(xl);
+            let txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            txt.setAttribute("x", cx);
+            txt.setAttribute("y", height - 8);
+            txt.setAttribute("font-size", "10px");
+            txt.setAttribute("fill", "#94a3b8");
+            txt.setAttribute("text-anchor", "middle");
+            txt.textContent = xl;
+            svg.appendChild(txt);
+        });
+
+        if(permutationHistory.length === 0) {
+            drawVerticalIndicator(svg, getX(obsDeltaMean), height - 25, `Observed (${obsDeltaMean.toFixed(1)})`, "#ef4444");
+            return;
+        }
+
+        const binWidth = 2;
+        let bins = {};
+        for(let v = minDomain; v <= maxDomain; v += binWidth) {
+            bins[v] = 0;
+        }
+
+        let maxBinCount = 0;
+        permutationHistory.forEach(v => {
+            let b = Math.floor(v / binWidth) * binWidth;
+            if(b >= minDomain && b <= maxDomain) {
+                bins[b]++;
+                if(bins[b] > maxBinCount) maxBinCount = bins[b];
+            }
+        });
+
+        let totalBarsWidth = (width - 40) / ((maxDomain - minDomain) / binWidth);
+        Object.keys(bins).forEach(binKey => {
+            let count = bins[binKey];
+            if(count === 0) return;
+
+            let val = parseFloat(binKey);
+            let bx = getX(val);
+            let bHeight = (count / maxBinCount) * (height - 60);
+            let by = height - 25 - bHeight;
+
+            let rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            rect.setAttribute("x", bx);
+            rect.setAttribute("y", by);
+            rect.setAttribute("width", Math.max(1, totalBarsWidth - 0.5));
+            rect.setAttribute("height", Math.max(1, bHeight));
+            rect.setAttribute("fill", "#cbd5e1");
+            svg.appendChild(rect);
+        });
+
+        let sortedHistory = [...permutationHistory].sort((a,b) => a - b);
+        let pctIdx = Math.floor(sortedHistory.length * 0.95);
+        let criticalValue95 = sortedHistory[pctIdx];
+
+        drawVerticalIndicator(svg, getX(criticalValue95), height - 25, `95th% (${criticalValue95.toFixed(1)})`, "#1e293b", true);
+        drawVerticalIndicator(svg, getX(obsDeltaMean), height - 25, `Observed (${obsDeltaMean.toFixed(1)})`, "#ef4444");
+    }
+
+    function drawVerticalIndicator(svg, x, bottomY, labelText, color, isDash = false) {
+        let line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", x);
+        line.setAttribute("y1", 15);
+        line.setAttribute("x2", x);
+        line.setAttribute("y2", bottomY);
+        line.setAttribute("stroke", color);
+        line.setAttribute("stroke-width", "1.5");
+        if(isDash) line.setAttribute("stroke-dasharray", "3,3");
+        svg.appendChild(line);
+
+        let dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        dot.setAttribute("cx", x);
+        dot.setAttribute("cy", 15);
+        dot.setAttribute("r", 3.5);
+        dot.setAttribute("fill", color);
+        svg.appendChild(dot);
+
+        let txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        txt.setAttribute("x", x + 5);
+        txt.setAttribute("y", 18);
+        txt.setAttribute("font-size", "10px");
+        txt.setAttribute("font-weight", "600");
+        txt.setAttribute("fill", color);
+        txt.textContent = labelText;
+        svg.appendChild(txt);
+    }
+
+    const allSliders = [sldMuA, sldSdA, sldNa, sldMuB, sldSdB, sldNb, sldSkew, sldKurt];
+    allSliders.forEach(slider => {
+        slider.addEventListener('input', () => {
+            stopContinuousLoop();
+            initData();
+        });
+    });
+
+    btnReset.addEventListener('click', () => {
+        stopContinuousLoop();
+        permutationHistory = [];
+        currentShuffledData = originalData.map(d => d.trueGroup);
+        calculateObservedMetrics();
+        renderAll();
+    });
+
+    btnStep.addEventListener('click', () => {
+        stopContinuousLoop();
+        runSinglePermutation();
+        renderAll();
+    });
+
+    btnLoop.addEventListener('click', () => {
+        if(loopInterval) {
+            stopContinuousLoop();
+        } else {
+            btnLoop.innerText = "Pause Simulation";
+            btnLoop.classList.add('btn-active');
+            loopInterval = setInterval(() => {
+                runSinglePermutation();
+                renderAll();
+            }, 80);
+        }
+    });
+
+    btn1000.addEventListener('click', () => {
+        stopContinuousLoop();
+        runBatchPermutations(1000);
+        renderAll();
+    });
+
+    function stopContinuousLoop() {
+        if(loopInterval) {
+            clearInterval(loopInterval);
+            loopInterval = null;
+            btnLoop.innerText = "Continuous Single Steps";
+            btnLoop.classList.remove('btn-active');
+        }
+    }
+
+    window.addEventListener('resize', renderAll);
+    initData();
+</script>
+</body>
+</html>
