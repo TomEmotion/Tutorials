@@ -165,7 +165,6 @@
         /* Shading Blocks */
         .group-a-shaded { background-color: var(--group-a-bg); }
         .group-b-shaded { background-color: var(--group-b-bg); }
-        .neutral-shaded { background-color: #ffffff; border-top: 1px solid var(--border-color); }
 
         .control-header {
             display: flex;
@@ -190,7 +189,6 @@
             cursor: pointer;
         }
 
-        /* Shared layout configurations for controls */
         .group-a-shaded input[type=range] { accent-color: var(--group-a); }
         .group-b-shaded input[type=range] { accent-color: var(--group-b); }
 
@@ -303,7 +301,7 @@
 
     <!-- Sliders Module Component Grid -->
     <div class="controls-grid">
-        <!-- Row 1: Group A Mean & SD -->
+        <!-- Group A Parameters -->
         <div class="control-item group-a-shaded">
             <div class="control-header">Group A Mean RT <span class="val" id="lbl-mu-a">400 ms</span></div>
             <input type="range" id="sld-mu-a" min="300" max="600" step="5" value="400">
@@ -312,17 +310,20 @@
             <div class="control-header">Group A SD <span class="val" id="lbl-sd-a">50 ms</span></div>
             <input type="range" id="sld-sd-a" min="10" max="150" step="5" value="50">
         </div>
-
-        <!-- Row 2: Group A Size & Skewness -->
         <div class="control-item group-a-shaded">
             <div class="control-header">Group A Size (N1) <span class="val" id="lbl-n-a">25</span></div>
             <input type="range" id="sld-n-a" min="10" max="100" step="1" value="25">
         </div>
-        <div class="control-item neutral-shaded">
-            <div class="control-header">Skewness <span class="val" id="lbl-skew">0.4</span></div>
-            <input type="range" id="sld-skew" min="-3" max="3" step="0.1" value="0.4">
+        <div class="control-item group-a-shaded">
+            <div class="control-header">Group A Skewness <span class="val" id="lbl-skew-a">0.4</span></div>
+            <input type="range" id="sld-skew-a" min="-3" max="3" step="0.1" value="0.4">
+        </div>
+        <div class="control-item group-a-shaded">
+            <div class="control-header">Group A Kurtosis <span class="val" id="lbl-kurt-a">0.0</span></div>
+            <input type="range" id="sld-kurt-a" min="-2" max="10" step="0.2" value="0.0">
         </div>
 
+        <!-- Group B Parameters -->
         <div class="control-item group-b-shaded">
             <div class="control-header">Group B Mean RT <span class="val" id="lbl-mu-b">440 ms</span></div>
             <input type="range" id="sld-mu-b" min="300" max="600" step="5" value="440">
@@ -331,14 +332,17 @@
             <div class="control-header">Group B SD <span class="val" id="lbl-sd-b">50 ms</span></div>
             <input type="range" id="sld-sd-b" min="10" max="150" step="5" value="50">
         </div>
-
         <div class="control-item group-b-shaded">
             <div class="control-header">Group B Size (N2) <span class="val" id="lbl-n-b">25</span></div>
             <input type="range" id="sld-n-b" min="10" max="100" step="1" value="25">
         </div>
-        <div class="control-item neutral-shaded">
-            <div class="control-header">Kurtosis <span class="val" id="lbl-kurt">0.0</span></div>
-            <input type="range" id="sld-kurt" min="-2" max="10" step="0.2" value="0.0">
+        <div class="control-item group-b-shaded">
+            <div class="control-header">Group B Skewness <span class="val" id="lbl-skew-b">0.4</span></div>
+            <input type="range" id="sld-skew-b" min="-3" max="3" step="0.1" value="0.4">
+        </div>
+        <div class="control-item group-b-shaded">
+            <div class="control-header">Group B Kurtosis <span class="val" id="lbl-kurt-b">0.0</span></div>
+            <input type="range" id="sld-kurt-b" min="-2" max="10" step="0.2" value="0.0">
         </div>
     </div>
 
@@ -351,9 +355,9 @@
 </div>
 
 <script>
-    let originalData = [];
-    let currentShuffledData = [];
-    let permutationHistory = [];
+    let originalData = []; 
+    let currentShuffledData = []; 
+    let permutationHistory = []; 
     let obsDeltaMean = 0;
     let loopInterval = null;
 
@@ -363,20 +367,26 @@
     const sldMuA = document.getElementById('sld-mu-a');
     const sldSdA = document.getElementById('sld-sd-a');
     const sldNa = document.getElementById('sld-n-a');
+    const sldSkewA = document.getElementById('sld-skew-a');
+    const sldKurtA = document.getElementById('sld-kurt-a');
+    
     const sldMuB = document.getElementById('sld-mu-b');
     const sldSdB = document.getElementById('sld-sd-b');
     const sldNb = document.getElementById('sld-n-b');
-    const sldSkew = document.getElementById('sld-skew');
-    const sldKurt = document.getElementById('sld-kurt');
+    const sldSkewB = document.getElementById('sld-skew-b');
+    const sldKurtB = document.getElementById('sld-kurt-b');
 
     const lblMuA = document.getElementById('lbl-mu-a');
     const lblSdA = document.getElementById('lbl-sd-a');
     const lblNa = document.getElementById('lbl-n-a');
+    const lblSkewA = document.getElementById('lbl-skew-a');
+    const lblKurtA = document.getElementById('lbl-kurt-a');
+    
     const lblMuB = document.getElementById('lbl-mu-b');
     const lblSdB = document.getElementById('lbl-sd-b');
     const lblNb = document.getElementById('lbl-n-b');
-    const lblSkew = document.getElementById('lbl-skew');
-    const lblKurt = document.getElementById('lbl-kurt');
+    const lblSkewB = document.getElementById('lbl-skew-b');
+    const lblKurtB = document.getElementById('lbl-kurt-b');
 
     const statTrueDiff = document.getElementById('stat-true-diff');
     const statObsDiff = document.getElementById('stat-obs-diff');
@@ -420,25 +430,31 @@
         const muA = parseFloat(sldMuA.value);
         const sdA = parseFloat(sldSdA.value);
         const nA = parseInt(sldNa.value);
+        const skewA = parseFloat(sldSkewA.value);
+        const kurtA = parseFloat(sldKurtA.value);
+        
         const muB = parseFloat(sldMuB.value);
         const sdB = parseFloat(sldSdB.value);
         const nB = parseInt(sldNb.value);
-        const skew = parseFloat(sldSkew.value);
-        const kurt = parseFloat(sldKurt.value);
+        const skewB = parseFloat(sldSkewB.value);
+        const kurtB = parseFloat(sldKurtB.value);
 
         lblMuA.innerText = muA + " ms";
         lblSdA.innerText = sdA + " ms";
         lblNa.innerText = nA;
+        lblSkewA.innerText = skewA;
+        lblKurtA.innerText = kurtA;
+        
         lblMuB.innerText = muB + " ms";
         lblSdB.innerText = sdB + " ms";
         lblNb.innerText = nB;
-        lblSkew.innerText = skew;
-        lblKurt.innerText = kurt;
+        lblSkewB.innerText = skewB;
+        lblKurtB.innerText = kurtB;
 
         statTrueDiff.innerText = (muB - muA).toFixed(1) + " ms";
 
-        let ptsA = generateFleishmanPoints(muA, sdA, nA, skew, kurt);
-        let ptsB = generateFleishmanPoints(muB, sdB, nB, skew, kurt);
+        let ptsA = generateFleishmanPoints(muA, sdA, nA, skewA, kurtA);
+        let ptsB = generateFleishmanPoints(muB, sdB, nB, skewB, kurtB);
 
         originalData = [];
         ptsA.forEach(v => originalData.push({val: v, trueGroup: 'A'}));
@@ -618,6 +634,7 @@
             if(currentShuffledData[idx] !== targetGroup) return;
 
             let cx = ((d.val - MIN_X) / (MAX_X - MIN_X)) * width;
+            
             let bucket = Math.round(cx / 6) * 6;
             colCounts[bucket] = (colCounts[bucket] || 0) + 1;
             let cy = height - 10 - (colCounts[bucket] * 5);
@@ -666,11 +683,11 @@
         });
 
         if(permutationHistory.length === 0) {
-            drawVerticalIndicator(svg, getX(obsDeltaMean), height - 25, `Observed (${obsDeltaMean.toFixed(1)})`, "#ef4444");
+            drawVerticalIndicator(svg, getX(obsDeltaMean), height - 25, `Observed (${obsDeltaMean.toFixed(1)})`, "#ef4444", false, 15);
             return;
         }
 
-        const binWidth = 2;
+        const binWidth = 2; 
         let bins = {};
         for(let v = minDomain; v <= maxDomain; v += binWidth) {
             bins[v] = 0;
@@ -708,14 +725,27 @@
         let pctIdx = Math.floor(sortedHistory.length * 0.95);
         let criticalValue95 = sortedHistory[pctIdx];
 
-        drawVerticalIndicator(svg, getX(criticalValue95), height - 25, `95th% (${criticalValue95.toFixed(1)})`, "#1e293b", true);
-        drawVerticalIndicator(svg, getX(obsDeltaMean), height - 25, `Observed (${obsDeltaMean.toFixed(1)})`, "#ef4444");
+        // Intelligently shift text positions vertically if indicators are close to prevent overlap
+        let overlap = Math.abs(getX(criticalValue95) - getX(obsDeltaMean)) < 65;
+        let obsY = 15;
+        let pctY = 15;
+        
+        if (overlap) {
+            if (obsDeltaMean >= criticalValue95) {
+                pctY = 32; // Drop the 95th% text lower down
+            } else {
+                obsY = 32; // Drop the Observed text lower down
+            }
+        }
+
+        drawVerticalIndicator(svg, getX(criticalValue95), height - 25, `95th% (${criticalValue95.toFixed(1)})`, "#1e293b", true, pctY);
+        drawVerticalIndicator(svg, getX(obsDeltaMean), height - 25, `Observed (${obsDeltaMean.toFixed(1)})`, "#ef4444", false, obsY);
     }
 
-    function drawVerticalIndicator(svg, x, bottomY, labelText, color, isDash = false) {
+    function drawVerticalIndicator(svg, x, bottomY, labelText, color, isDash = false, textY = 15) {
         let line = document.createElementNS("http://www.w3.org/2000/svg", "line");
         line.setAttribute("x1", x);
-        line.setAttribute("y1", 15);
+        line.setAttribute("y1", 12);
         line.setAttribute("x2", x);
         line.setAttribute("y2", bottomY);
         line.setAttribute("stroke", color);
@@ -725,14 +755,23 @@
 
         let dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         dot.setAttribute("cx", x);
-        dot.setAttribute("cy", 15);
+        dot.setAttribute("cy", textY - 3);
         dot.setAttribute("r", 3.5);
         dot.setAttribute("fill", color);
         svg.appendChild(dot);
 
         let txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        txt.setAttribute("x", x + 5);
-        txt.setAttribute("y", 18);
+        
+        // Dynamic anchor alignment to keep text bounding within viewport bounds safely
+        if (x > (svg.clientWidth || 400) - 80) {
+            txt.setAttribute("x", x - 6);
+            txt.setAttribute("text-anchor", "end");
+        } else {
+            txt.setAttribute("x", x + 6);
+            txt.setAttribute("text-anchor", "start");
+        }
+        
+        txt.setAttribute("y", textY);
         txt.setAttribute("font-size", "10px");
         txt.setAttribute("font-weight", "600");
         txt.setAttribute("fill", color);
@@ -740,7 +779,7 @@
         svg.appendChild(txt);
     }
 
-    const allSliders = [sldMuA, sldSdA, sldNa, sldMuB, sldSdB, sldNb, sldSkew, sldKurt];
+    const allSliders = [sldMuA, sldSdA, sldNa, sldSkewA, sldKurtA, sldMuB, sldSdB, sldNb, sldSkewB, sldKurtB];
     allSliders.forEach(slider => {
         slider.addEventListener('input', () => {
             stopContinuousLoop();
@@ -771,7 +810,7 @@
             loopInterval = setInterval(() => {
                 runSinglePermutation();
                 renderAll();
-            }, 80);
+            }, 80); 
         }
     });
 
@@ -793,5 +832,6 @@
     window.addEventListener('resize', renderAll);
     initData();
 </script>
+
 </body>
 </html>
